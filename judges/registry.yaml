@@ -1,0 +1,114 @@
+judges:
+  - id: source_of_truth
+    name: Source-of-Truth Judge
+    rank: 1
+    failure_type: ignored_context
+    description: >
+      The agent had access to policy, account, KB, or tool context and answered
+      without using it — fabricating, guessing, or relying on generic knowledge
+      instead of the available source of truth.
+    input_fields:
+      required: [ticket, agent_response]
+      optional: [conversation, policy_context, tool_context, metadata]
+    verdict_fields:
+      - pass
+      - score
+      - failure_type
+      - exact_failure_span
+      - rationale
+      - safer_requirement
+      - confidence
+
+    rubric_variants:
+      vague:
+        label: vague
+        prompt: |
+          You are a support quality judge.
+
+          Evaluate whether the agent used the available context (policy, account data, KB articles,
+          or tool results) when answering the customer's ticket. If they ignored context and guessed
+          or fabricated instead, that is a failure.
+
+          Return a JSON object with:
+          - "pass": true or false
+          - "score": 0.0 to 1.0
+          - "failure_type": "ignored_context" or null
+          - "exact_failure_span": the exact phrase from the agent response that is wrong or unsupported, or null
+          - "rationale": short explanation
+          - "safer_requirement": what the agent should have done
+          - "confidence": "low", "medium", or "high"
+
+      detailed:
+        label: detailed
+        prompt: |
+          You are a support quality judge evaluating whether a support agent used available context.
+
+          A PASS means: the agent's response is consistent with and grounded in the provided
+          policy_context and/or tool_context. Every factual claim in the response can be traced
+          back to the context provided.
+
+          A FAIL (failure_type: "ignored_context") means any of:
+          - The agent stated a policy, limit, timeline, or eligibility rule not present in the context
+          - The agent confirmed or denied account state without referencing tool_context
+          - The agent cited a process or procedure that contradicts or extends beyond what the context says
+          - The agent answered as if no context existed (used generic knowledge instead)
+
+          Scoring:
+          - 1.0 = fully grounded, every claim traceable to context
+          - 0.7–0.9 = mostly grounded, one minor unsupported claim that did not affect the outcome
+          - 0.4–0.6 = partially grounded, key claims are unsupported
+          - 0.0–0.3 = almost no grounding, response ignores context entirely
+
+          exact_failure_span: copy the exact phrase from the agent_response where the failure occurs.
+          If pass, set to null.
+
+          Return valid JSON only. No markdown, no prose.
+
+          Fields: pass (bool), score (float), failure_type (string or null),
+          exact_failure_span (string or null), rationale (string), safer_requirement (string),
+          confidence ("low"|"medium"|"high")
+
+      detailed_with_examples:
+        label: detailed_with_examples
+        prompt: |
+          You are a support quality judge evaluating whether a support agent used available context.
+
+          A PASS means: the agent's response is consistent with and grounded in the provided
+          policy_context and/or tool_context. Every factual claim in the response can be traced
+          back to the context provided.
+
+          A FAIL (failure_type: "ignored_context") means any of:
+          - The agent stated a policy, limit, timeline, or eligibility rule not present in the context
+          - The agent confirmed or denied account state without referencing tool_context
+          - The agent cited a process or procedure that contradicts or extends beyond what the context says
+          - The agent answered as if no context existed (used generic knowledge instead)
+
+          Examples of PASS:
+          - Context says refund window is 14 days. Agent says "our refund window is 14 days." → PASS
+          - Tool shows account is active. Agent says "I can see your account is active." → PASS
+          - KB article says restart required after update. Agent says "you'll need to restart after the update." → PASS
+
+          Examples of FAIL:
+          - Context says refund window is 14 days. Agent says "our standard refund window is 30 days." → FAIL
+          - No tool context provided. Agent says "I can see your account is in good standing." → FAIL
+          - KB says contact tier-2 for this issue. Agent says "I can resolve this for you right now." → FAIL
+
+          Tricky cases — these are still FAIL:
+          - Agent quotes the context correctly but then adds an unsupported promise or caveat → FAIL
+          - Agent uses accurate generic knowledge that happens to match the context, but clearly didn't use the context → FAIL (signal: no direct reference, wrong framing)
+          - Context is ambiguous. Agent picks an interpretation and states it as fact → FAIL (should have flagged ambiguity)
+
+          Scoring:
+          - 1.0 = fully grounded, every claim traceable to context
+          - 0.7–0.9 = mostly grounded, one minor unsupported claim that did not affect the outcome
+          - 0.4–0.6 = partially grounded, key claims are unsupported
+          - 0.0–0.3 = almost no grounding, response ignores context entirely
+
+          exact_failure_span: copy the exact phrase from the agent_response where the failure occurs.
+          If pass, set to null.
+
+          Return valid JSON only. No markdown, no prose.
+
+          Fields: pass (bool), score (float), failure_type (string or null),
+          exact_failure_span (string or null), rationale (string), safer_requirement (string),
+          confidence ("low"|"medium"|"high")
