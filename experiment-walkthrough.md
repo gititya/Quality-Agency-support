@@ -133,3 +133,24 @@ The rubric debate is settled for now: vague wins. The next lever is data quality
 Before moving to Judge 2, the corrected examples from this run (the 16 Qwen3 failures, especially the red-team misses) should be marked up and added to the gold set. That corrected data is what fine-tuning will use once the top 3 judges have baselines.
 
 Judge 2 is the **SOP / process adherence judge** — did the agent skip a required step in the workflow? That's a structurally different judgment because it requires the model to track a sequence, not just compare a statement to a fact.
+
+---
+
+## Wind-up — what the 16 failures teach
+
+Every Qwen3 miss fell into one of two patterns. It's worth understanding both before moving on.
+
+**Pattern 1: The agent says something wrong and Qwen still passes it.**
+This happened on 6 gold-set failures. The clearest case: agent said the API rate limit was 500 req/min; the tool right in front of the judge said 1,000. Qwen said the agent "correctly states the rate limit." It never compared the number. Two other cases were more subtle — Qwen identified the problem in its own reasoning ("this is incorrect") but still returned pass=true in the verdict. The reasoning and the answer contradicted each other.
+
+**Pattern 2: The agent avoids the context without contradicting it, and Qwen passes it.**
+This is the harder failure mode, and all 10 red-team examples fell here. The agents in these examples are careful — they say "enough time" instead of 24 hours, "close to the threshold" instead of 48 vs 50, "depends on your billing setup" instead of "next billing cycle." No fact is wrong. But no fact from the provided context is used either.
+
+Qwen's mistake here was using the wrong test. It asked "does this response contradict the context?" instead of "does this response use the context?" Those are different questions. A response can avoid every fact the context contains without contradicting a single one. The red-team was designed to expose that gap, and it did.
+
+**The four rationale hallucinations.** The most alarming finding: on 4 red-team examples, Qwen invented facts from the agent response. It said the agent "mentions the 24-hour window" when the agent said "enough time." It said the agent "mentions next billing cycle" when the agent said "depends on your billing setup." The model was generating plausible-sounding justification rather than reading what the agent actually wrote. If you can't trust the rationale, you can't use it to audit the verdict.
+
+**What goes into fine-tuning data:**
+- 6 corrected gold failures → `data/corrected/source_of_truth.jsonl` — cover the rubric interpretation errors
+- 10 corrected red-team examples → `data/future_finetune/source_of_truth.jsonl` — cover the avoidance-without-contradiction patterns
+- Highest priority training signal: the "doesn't contradict ≠ uses context" pattern (rt_03, rt_10) and the rationale hallucinations (rt_04, rt_06, rt_07, rt_08)

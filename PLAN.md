@@ -95,8 +95,16 @@ For each judge, in rank order:
    - primary/challenger disagreement
    - confidence calibration
 6. Produce a short report explaining what failed and what the rubric/model missed.
-7. Stop and ask Adi to approve the run.
-8. After approval, commit and push that judge/run before starting the next judge.
+7. Perform the judge wind-up pass:
+   - identify all primary-model failures
+   - classify each failure into judge-specific error buckets
+   - add or update corrected gold, red-team, or future-finetune records
+   - preserve the winning rubric-ablation conclusion
+   - write a short wind-up note covering what the judge catches, what it misses, whether the challenger helped, and what should become fine-tuning data
+8. Stop and ask Adi to approve the run and wind-up artifacts.
+9. After approval, commit and push that judge/run before starting the next judge.
+
+A judge is not complete when the model run finishes. A judge is complete only after wind-up, corrected examples, approval, and commit.
 
 Commit message format:
 
@@ -123,6 +131,27 @@ Include these in v1, not later:
 
 Fine-tuning starts only after the top 3 judges have corrected gold data and baseline reports. First fine-tune target should be one judge with 150-200 examples and 20% held out.
 
+## End-to-End Support Quality Pipeline
+
+After all 15 narrow judges have approved baseline runs, build an E2E pipeline that runs the full judge agency against one support case and produces a single quality review.
+
+This should be a synthesis layer over the judges, not a replacement for them:
+
+- Run all applicable narrow judges on the same ticket/conversation/response bundle.
+- Collect each judge verdict, exact failure span, confidence, and rationale.
+- Feed the collected verdicts into the best available synthesis model.
+- Output a support-quality report with:
+  - what the agent did well
+  - what failed
+  - what is risky or uncertain
+  - which failures need human review
+  - overall quality grade
+  - prioritized fix list
+
+The synthesis model must not override judge evidence silently. If it disagrees with a judge, the report should show the disagreement.
+
+Build this only after the narrow judges exist, because the proof of work is the interpretable judge agency plus the E2E synthesis report.
+
 ## Test Plan
 
 - Schema tests for valid and invalid judge inputs.
@@ -131,6 +160,7 @@ Fine-tuning starts only after the top 3 judges have corrected gold data and base
 - Regression tests with at least 10 locked examples per approved judge.
 - Model adapter test confirming both MLX model IDs run through the same judge interface.
 - Report test confirming every approved run produces reproducible artifacts before commit.
+- Wind-up test confirming primary-model failures are bucketed and corrected examples are written before the judge is marked complete.
 
 ## Assumptions
 

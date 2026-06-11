@@ -117,6 +117,21 @@ After each judge's approved run, write an experiment walkthrough following the s
 - End each stage with a bridge to the next.
 - The baseline comparison is always mandatory — rubric ablation is the baseline for prompt engineering, just as the untuned model is the baseline for fine-tuning.
 
+## Wind-up workflow — standing rule after every judge baseline run
+
+Do not treat a judge as complete until this pass is done. Before moving to the next judge:
+
+1. Read `primary_outputs.jsonl` and identify every case where Qwen's verdict was wrong.
+2. For each failure, classify into one or more buckets: `obvious_context_contradiction_miss`, `subtle_red_team_miss`, `span_location_failure`, `overconfident_wrong_verdict`, `rubric_interpretation_failure`, `malformed_or_weak_rationale`.
+3. Write a corrected record for each failure: original label, Qwen verdict, corrected verdict, exact failure span, why Qwen missed it, what the judge should learn, destination (`gold`, `red_team`, or `future_finetune`).
+4. Save corrected gold records to `data/corrected/<judge_id>.jsonl`.
+5. Save red-team and nuanced failures to `data/future_finetune/<judge_id>.jsonl` with full corrected verdict.
+6. Preserve the winning rubric-ablation conclusion for that judge. Do not reopen it.
+7. Write `reports/<judge_id>/<run_id>/windup_note.md` covering: what the judge catches well, what it misses, whether the challenger was useful, and what should become fine-tuning data.
+8. Run all tests (`python3 tests/test_parser.py && python3 tests/test_scorer.py && python3 tests/test_data_integrity.py`). All must pass before committing.
+9. Show Adi the diff and ask for approval. Do not commit until approved.
+10. After approval, commit with message: `judge: approve <judge-id> baseline run` and push before starting the next judge.
+
 ## File integrity
 
 CLAUDE.md and SKILL.md are append-only. No wholesale rewrites.
