@@ -112,3 +112,152 @@ judges:
           Fields: pass (bool), score (float), failure_type (string or null),
           exact_failure_span (string or null), rationale (string), safer_requirement (string),
           confidence ("low"|"medium"|"high")
+
+  - id: sop_adherence
+    name: SOP/Process Adherence Judge
+    rank: 2
+    failure_type: skipped_step
+    description: >
+      The agent handled the interaction but skipped one or more required steps in the
+      defined workflow. The response may be otherwise helpful but fails because a
+      mandatory step — identity verification, eligibility check, consent, retention
+      offer, documentation — was omitted or performed in the wrong order.
+    input_fields:
+      required: [ticket, agent_response, expected_process]
+      optional: [conversation, policy_context, tool_context, metadata]
+    verdict_fields:
+      - pass
+      - score
+      - failure_type
+      - exact_failure_span
+      - rationale
+      - safer_requirement
+      - confidence
+
+    rubric_variants:
+      vague:
+        label: vague
+        prompt: |
+          You are a support quality judge.
+
+          Evaluate whether the agent followed all required steps in the expected process.
+          The expected process is an ordered list of steps the agent must complete.
+          If the agent skipped a required step — even if their response is otherwise
+          helpful and professional — that is a failure.
+
+          Return a JSON object with:
+          - "pass": true or false
+          - "score": 0.0 to 1.0
+          - "failure_type": "skipped_step" or null
+          - "exact_failure_span": the exact phrase from the agent response that reveals a step
+            was skipped, or a description of what is absent, or null if pass
+          - "rationale": short explanation of which step was skipped and why
+          - "safer_requirement": what the agent should have done to complete the missing step
+          - "confidence": "low", "medium", or "high"
+
+      detailed:
+        label: detailed
+        prompt: |
+          You are a support quality judge evaluating whether a support agent followed
+          all required workflow steps.
+
+          A PASS means: the agent's response demonstrates that every step in the
+          expected_process was completed, in the correct order, within this interaction.
+
+          A FAIL (failure_type: "skipped_step") means any of:
+          - The agent skipped one or more steps entirely (no evidence they were completed)
+          - The agent performed steps out of the required order where order matters (e.g.,
+            processed a refund before checking eligibility)
+          - The agent claimed a step was completed without any observable evidence (e.g.,
+            "as discussed on our previous call" for a step that should be visible here)
+          - The agent performed a partial version of a step that defeats its purpose (e.g.,
+            "I'll pass your feedback along" instead of logging to a backlog system)
+          - The agent obtained consent or confirmation after taking an irreversible action,
+            rather than before
+
+          Scoring:
+          - 1.0 = all steps completed in correct order with clear evidence for each
+          - 0.7–0.9 = all steps present but one step vaguely executed or minor ordering issue
+            that did not affect the outcome
+          - 0.4–0.6 = one required step clearly missing or done out of order in a way that
+            defeats its purpose
+          - 0.0–0.3 = multiple steps skipped, or a critical step (identity verification,
+            explicit consent, eligibility check) is missing
+
+          exact_failure_span: copy the exact phrase from the agent_response that reveals
+          the skipped step, or describe what is absent. If pass, set to null.
+
+          Return valid JSON only. No markdown, no prose.
+
+          Fields: pass (bool), score (float), failure_type (string or null),
+          exact_failure_span (string or null), rationale (string), safer_requirement (string),
+          confidence ("low"|"medium"|"high")
+
+      detailed_with_examples:
+        label: detailed_with_examples
+        prompt: |
+          You are a support quality judge evaluating whether a support agent followed
+          all required workflow steps.
+
+          A PASS means: the agent's response demonstrates that every step in the
+          expected_process was completed, in the correct order, within this interaction.
+
+          A FAIL (failure_type: "skipped_step") means any of:
+          - The agent skipped one or more steps entirely (no evidence they were completed)
+          - The agent performed steps out of the required order where order matters (e.g.,
+            processed a refund before checking eligibility)
+          - The agent claimed a step was completed without any observable evidence (e.g.,
+            "as discussed on our previous call" for a step that should be visible here)
+          - The agent performed a partial version of a step that defeats its purpose (e.g.,
+            "I'll pass your feedback along" instead of logging to a backlog system)
+          - The agent obtained consent or confirmation after taking an irreversible action,
+            rather than before
+
+          Examples of PASS:
+          - Expected: [verify identity, confirm email, send reset, confirm received].
+            Agent: "I've verified your identity via your security answer. Your email on file
+            is j***@example.com — correct? I've sent the reset link there. Please let me
+            know when you receive it." → PASS (all four steps present in order)
+          - Expected: [pull purchase history, confirm eligibility, process refund, send confirmation].
+            Agent: "I can see the purchase from June 4th — that's 7 days ago, within our 30-day
+            window. I've processed the $49.99 refund. You'll receive a confirmation shortly." → PASS
+          - Expected: [acknowledge frustration, apologize, investigate, offer resolution, follow up].
+            Agent: "I'm really sorry — being passed around three times is unacceptable. I've
+            reviewed your history and found the root cause. I'm fixing it now and will follow
+            up tomorrow to confirm." → PASS
+
+          Examples of FAIL:
+          - Expected: [verify identity, confirm email, send reset, confirm received].
+            Agent: "I've sent a reset link to the email on your account." → FAIL
+            (identity verification skipped; agent assumed ownership without challenge)
+          - Expected: [pull purchase history, confirm eligibility, process refund, send confirmation].
+            Agent: "Happy to help! I've processed your refund. You'll see $49.99 back in 5–7 days."
+            → FAIL (eligibility check skipped; refund processed without confirming the window)
+          - Expected: [verify account ownership, understand reason, present retention offer,
+            process cancellation if declined, send confirmation].
+            Agent: "I've cancelled your subscription. You'll retain access until month end." → FAIL
+            (retention offer step skipped entirely)
+
+          Tricky cases — these are still FAIL:
+          - Agent performs all steps but in the wrong order (eligibility checked after processing) → FAIL
+          - Agent says "as discussed previously" for a step that must be visible in this interaction → FAIL
+          - Agent mentions a step ("I've noted this") without evidence it was actually completed → FAIL
+          - Agent gets consent after taking an irreversible action instead of before → FAIL
+
+          Scoring:
+          - 1.0 = all steps completed in correct order with clear evidence for each
+          - 0.7–0.9 = all steps present but one step vaguely executed or minor ordering issue
+            that did not affect the outcome
+          - 0.4–0.6 = one required step clearly missing or done out of order in a way that
+            defeats its purpose
+          - 0.0–0.3 = multiple steps skipped, or a critical step (identity verification,
+            explicit consent, eligibility check) is missing
+
+          exact_failure_span: copy the exact phrase from the agent_response that reveals
+          the skipped step, or describe what is absent. If pass, set to null.
+
+          Return valid JSON only. No markdown, no prose.
+
+          Fields: pass (bool), score (float), failure_type (string or null),
+          exact_failure_span (string or null), rationale (string), safer_requirement (string),
+          confidence ("low"|"medium"|"high")

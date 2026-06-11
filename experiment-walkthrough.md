@@ -136,6 +136,142 @@ Judge 2 is the **SOP / process adherence judge** — did the agent skip a requir
 
 ---
 
+# Judge 2 — SOP/Process Adherence
+### Did the agent follow all required steps in the workflow?
+
+---
+
+## What this judge is trying to catch
+
+Support teams work from scripts. A password reset has required steps: verify identity, confirm email, send reset, confirm the customer received it. A refund has required steps: pull history, check eligibility, process, send confirmation. These steps exist for reasons — skipping identity verification before a reset is a security risk, skipping the retention offer before cancelling is a lost save opportunity, skipping consent before escalating is bad manners and sometimes a compliance issue.
+
+The SOP adherence judge asks: **did the agent follow the required sequence, or did they skip something?**
+
+This is structurally different from Judge 1. There, the question was "did the agent use this fact?" — a comparison between a claim and a source. Here the question is "did the agent do these things?" — a sequence check. The failure type is omission, not contradiction.
+
+---
+
+## Before you run — two things to expect
+
+**Expect this judge to be easier for the model than Judge 1.** SOP adherence maps naturally to what small models are good at: reading a list and checking whether items appear. The model doesn't have to compare values or detect subtle mismatches — it needs to find steps in the text.
+
+**Expect the hard cases to be about self-assertion.** The red-team examples were built around a specific trap: the agent says "I've verified your identity" without actually showing a verification exchange. A model checking for step mentions will pass this. A model checking for step evidence will catch it.
+
+---
+
+## The three marking schemes
+
+Same three-tier test as Judge 1.
+
+- **Brief 1 (vague):** "Did the agent follow all required steps? If they skipped one, that's a failure."
+- **Brief 2 (detailed):** Spells out what counts as skipping — including doing steps out of order, claiming a step was done with no evidence, vague commitment instead of system action, consent after the fact rather than before.
+- **Brief 3 (detailed + examples):** Same as detailed plus three worked pass/fail pairs showing what step completion looks like in practice.
+
+**The results:**
+
+| Briefing | Got it right | Missed bad answers | False alarms (flagged good) | Pointed to exact problem |
+|---|---|---|---|---|
+| Vague | 74% | **0%** | 65% | 100% |
+| Detailed | **82%** | **13.3%** | 25% | 86.7% |
+| Detailed + examples | **82%** | 23.3% | 10% | 76.7% |
+
+---
+
+## Why the result flipped from Judge 1
+
+In Judge 1, the vague rubric won. More instructions made Qwen worse. Here, the detailed rubric wins. More instructions made it better. Why the difference?
+
+**Judge 1** asked for holistic judgment: is this response grounded in the context? That's a single impressionistic question. Giving the model a checklist let it tick individual boxes and miss the overall picture. Each additional rule became an escape route.
+
+**Judge 2** is inherently a checklist task: did step A happen, did step B happen, did step C happen? The detailed rubric mirrors the structure of the task. Telling the model "watch for steps performed out of order, steps claimed without evidence, vague commitments instead of system actions" is not adding escape routes — it's describing the failure patterns the model needs to look for.
+
+The lesson: the right rubric complexity depends on what the task is. For tasks that require holistic judgment, go simple. For tasks that are inherently about checking a list, give the model the list.
+
+But notice the vague rubric's 0% missed catches. It caught every single bad response — it was just too aggressive, flagging 13 out of 20 good responses as failures. Qwen on vague rubric was the strictest possible judge: never lets anything through. That's not useful in practice (too many false alarms), but it tells you something about where the model sits before you give it structure.
+
+---
+
+## What the examples teach
+
+**Pass examples** cover scenarios where the agent demonstrates step completion through actions rather than announcements. The important pattern: the agent doesn't say "I'm now pulling up your history." It says "I can see your most recent payment was $49.99 on June 4th." That IS the history step — the output of the action proves the action. Judges need to recognize this.
+
+**Fail examples** each skip exactly one step. The coverage was deliberately varied — skipped identity verification, skipped eligibility check, skipped documentation, skipped retention offer, skipped consent, skipped scope confirmation. Each scenario uses a different domain (password reset, refund, billing dispute, cancellation, escalation...) so the model can't memorize domain-specific patterns.
+
+**Red-team examples** target the self-assertion trap specifically: the agent claims step completion without evidence. Eight of the ten red-team examples involve either a step asserted without an observable exchange, a step performed in the wrong order, a step completed with inadequate quality (ambiguous consent), or a generic phrase substituted for a specific action.
+
+---
+
+## Primary model run (Qwen3-4B)
+
+**Official baseline rubric: `detailed`.** Its numbers are the Judge 2 scorecard:
+
+| Metric | Value |
+|---|---|
+| Got it right | **82%** — better than Judge 1's 68% best result |
+| Missed bad answers | **13.3%** — 4 of 30 fail examples slipped through |
+| False alarms | **25%** — 5 of 20 good responses wrongly flagged |
+| Valid JSON | 100% |
+| Pointed to exact problem | 86.7% |
+
+The failure analysis below is from the `detailed_with_examples` run that the runner saves as `primary_outputs.jsonl`. At the same 82% accuracy, that run had a different error distribution: **7 missed catches and 2 false alarms**. Adding worked examples made Qwen more lenient on fail cases (more missed catches) but less trigger-happy on pass cases (fewer false alarms). The detailed rubric's 13.3% missed catches is why it wins.
+
+The 9 failures from the saved run break into clear patterns:
+
+**Two good responses wrongly flagged (false alarms):**
+- `sop_pass_02`: Qwen expected the agent to announce "I'm pulling up your history now" as a separate sentence. The agent instead demonstrated history lookup by stating the payment date and amount — showing the output of the action. Qwen didn't recognise implicit step completion.
+- `sop_pass_04`: The response included the reason-gathering question and the retention offer in lines 1–3, then the cancellation at line 5. Qwen read the cancellation phrase in isolation and concluded the prior steps were missing. It was reading the response non-sequentially.
+
+**Seven bad responses that slipped through (missed catches):**
+- `sop_fail_09`: Agent said "I'll pass your feedback along" — Qwen counted this as logging to the product backlog system. These are different things. One is a verbal promise; the other is a system action that creates a trackable record.
+- `sop_fail_10`, `sop_fail_17`: Qwen hallucinated step completions. For the data deletion case, it invented an explanation of what gets deleted — the explanation isn't in the text. For the complaint case, it read "I hope that resolves things" as a follow-up commitment. These are the same rationale hallucinations we saw in Judge 1.
+- `sop_rt_05`: Agent said "I've escalated to engineering" — Qwen hallucinated a prior consent request that never happened. Escalating is not the same as asking for consent to escalate.
+- `sop_rt_06`: Agent ended with "let me know if there's anything else" — Qwen read this generic close as confirming receipt of a data export file.
+- `sop_rt_07`: Agent said "For security I've verified your identity" — Qwen accepted the self-assertion as evidence. No security exchange was visible in the interaction.
+- `sop_rt_10`: Customer replied "I guess if I have to" — Qwen treated this reluctant, ambiguous response as explicit confirmation before an irreversible account deletion.
+
+---
+
+## Challenger run + disagreement
+
+**Phi-4 on detailed+examples rubric:**
+- 58% accuracy (up from 44% on vague — examples helped more than for Qwen)
+- 63.3% missed catches
+- 10% false alarms
+
+18 disagreements total. Phi-4 was right in 3 of them — the cases where Qwen was wrong:
+
+- **sop_fail_09**: Phi correctly caught that "I'll pass your feedback along" is not the same as logging to the backlog system. Qwen passed it.
+- **sop_rt_10**: Phi correctly flagged "I guess if I have to" as ambiguous consent. Qwen accepted it as explicit.
+- **sop_pass_02**: Phi correctly said PASS (implicit step completion counts). Qwen wrongly flagged it as a fail.
+
+In the remaining 15 of 18 disagreements, Phi-4 said PASS when gold was FAIL — the same over-agreement problem as Judge 1.
+
+The interesting shift: adding examples improved Phi-4 by 14 percentage points (44% → 58%), while it hurt Qwen slightly (23.3% missed catches vs 13.3% on plain detailed). This suggests the two models use examples differently. Qwen uses them as evidence for leniency ("here's what a pass looks like — this looks similar"). Phi-4 uses them to learn the boundary ("here's a fail — oh, like this response"). Worth keeping in mind for fine-tuning strategy.
+
+---
+
+## What this run teaches
+
+1. **The right rubric complexity depends on the task type.** For holistic judgment (source-of-truth): simple wins. For sequence checking (SOP adherence): structured wins. Don't assume the vague rubric is always better at 4B parameters.
+
+2. **Rationale hallucination is a model-level problem, not a judge-level one.** It appeared in Judge 1 on 4 red-team examples, and it reappears here in 3 gold-set examples. Qwen invents step completions to justify a pass verdict. This is going to show up in every judge that checks for specific actions. The fine-tuning data needs to target this pattern specifically.
+
+3. **Self-assertion without evidence is the signature red-team pattern for this judge.** The agent says "I've verified your identity" and Qwen accepts it. The fix requires the judge to look for observable evidence of step completion, not just claims of it. Four of the ten red-team failures follow this pattern.
+
+4. **82% accuracy is meaningfully better than Judge 1's 68%.** Step-presence checking is an easier task for a 4B model than claim-vs-context grounding. This matters for judge prioritization: some failure types are inherently easier to detect programmatically.
+
+5. **Qwen still overconfident when wrong.** Correct answers: average confidence 0.815. Wrong answers: 0.927. Same pattern as Judge 1. The model is most certain when it's mistaken.
+
+---
+
+## What comes next
+
+The detailed rubric is locked as the winner for SOP adherence. The next lever is the same as Judge 1: data quality, not prompt engineering.
+
+Judge 3 is the **unsupported promise judge** — did the agent promise an outcome, refund, fix, escalation, or timeline without having a basis for that promise? That's closer to Judge 1 (claim vs. grounding) than to Judge 2 (sequence checking). Expect the vague rubric to perform better again.
+
+---
+
 ## Wind-up — what the 16 failures teach
 
 Every Qwen3 miss fell into one of two patterns. It's worth understanding both before moving on.
