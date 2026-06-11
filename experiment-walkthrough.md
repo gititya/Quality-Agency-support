@@ -290,3 +290,108 @@ Qwen's mistake here was using the wrong test. It asked "does this response contr
 - 6 corrected gold failures → `data/corrected/source_of_truth.jsonl` — cover the rubric interpretation errors
 - 10 corrected red-team examples → `data/future_finetune/source_of_truth.jsonl` — cover the avoidance-without-contradiction patterns
 - Highest priority training signal: the "doesn't contradict ≠ uses context" pattern (rt_03, rt_10) and the rationale hallucinations (rt_04, rt_06, rt_07, rt_08)
+
+---
+
+# Judge 3 — Unsupported Promise
+### Did the agent promise something they couldn't back up?
+
+---
+
+## Before you start — three things to get straight
+
+**What this judge catches.** A support agent sometimes makes commitments that go beyond what they can actually deliver: "You'll have your refund in 24 hours" (policy says 5–7 days), "I can guarantee this won't happen again" (no one can guarantee that), "I'll have a senior engineer call you in 2 hours" (no such SLA exists). These are unsupported promises — specific commitments made without grounding in the available policy or account data. The failure type is `unsupported_promise`.
+
+**Why it matters.** An unsupported promise creates a customer expectation the company can't meet. When the refund doesn't arrive in 24 hours, the customer is angrier than if no timeline had been given at all. When the bug recurs after "I can guarantee it won't," the company has a credibility problem, not just a technical one. The promise itself causes the damage — the failure is in the moment the agent said it.
+
+**What a naive model misses.** Two things. First, hedged language that still implies a specific commitment: "you should receive this within 24 hours" is still a wrong timeline even though it says "should." Second, compositional promises — where part of the response is grounded and a small addition is not. A response that's 90% correct with one unauthorized clause is still a failure. A naive model will read the correct portion, conclude the response is fine, and miss the unauthorized addition at the end.
+
+---
+
+## The three marking schemes
+
+This judge is structurally similar to Judge 1: the model is asked to evaluate a claim against provided context, using holistic judgment rather than checking off a list of steps. That similarity predicts the rubric result before you run it.
+
+**Vague:** "Did the agent make any promises without a basis for them?" — Simple, open-ended. The model knows what a promise is. It can check it against the provided policy.
+
+**Detailed:** Enumerates six types of unsupported promises (timeline, outcome guarantee, unauthorized credit, escalation SLA, feature delivery, invented policy rule). Plus a scoring scale. Makes the model go through a checklist of failure modes.
+
+**Detailed with examples:** Same enumeration plus three worked pass/fail examples and a "tricky cases" section.
+
+**Which rubric won: vague.** With a perfect score.
+
+| Rubric | Accuracy | Missed catches | False alarms |
+|---|---|---|---|
+| **vague** ← official | **100%** | **0%** | 0% |
+| detailed | 96% | 6.7% | 0% |
+| detailed_with_examples | 92% | 13.3% | 0% |
+
+More detail made Qwen worse, not better. Adding failure-type categories may have caused Qwen to pattern-match against specific categories (timeline, credit amount) rather than asking the fundamental question. The red-team examples were designed to not fit neatly into categories — conditional framing, compositional promises, hedged language. The vague rubric's open question let Qwen evaluate intent rather than match patterns.
+
+This confirms the cross-judge pattern: holistic judgment → simple rubric. Checklist verification → structured rubric.
+
+---
+
+## What the examples teach
+
+**A pass** looks like an agent who quotes policy exactly ("you'll see the refund within 5–7 business days"), hedges appropriately when outcomes are uncertain ("I can't give you a specific timeframe — it depends on engineering triage"), or stays within authorized limits ("I've applied the $25 loyalty credit"). The agent makes no specific commitment they can't back up.
+
+**An unambiguous fail** looks like a specific number the policy contradicts: "within 24 hours" when policy says 5–7 days. Or a guarantee that is logically impossible: "I can guarantee this won't happen again." Or an amount that exceeds authorization: offering $100 when only $25 is approved. These are easy catches — the model just needs to compare the agent's claim to the policy number.
+
+**What makes the red-team hard.** Ten examples, all `label: false`, all designed to look like reasonable responses:
+
+- **Hedged wrong timelines** (rt_01): Agent says "you should receive it within 24–48 hours." The "should" sounds cautious. But "24–48 hours" is still a factually wrong timeline relative to the 5–7 day policy — hedging the wrong number doesn't make it right.
+- **Grounded anchor + unauthorized addition** (rt_03): Agent correctly quotes the refund timeline, then appends "I've also applied a $50 loyalty credit." The first part is fully grounded. The $50 exceeds the $25 policy cap. A model that averages across the whole response will pass it.
+- **Conditional framing hiding an absolute guarantee** (rt_04): "Once they identify and patch the root cause, the issue will be resolved permanently — these crashes won't come back." The "once they..." opener sounds like hedging. The conclusion is an absolute guarantee. Policy: "Recurrence cannot be guaranteed."
+- **Completed action implying guaranteed outcome** (rt_08): Agent performs two authorized troubleshooting steps, then says "it should work." The steps are grounded. The prediction isn't. Policy: "Resolution not guaranteed — may require engineering escalation."
+- **Empathy as cover** (rt_10): Agent opens by explicitly refusing to overpromise ("I can't wave a magic wand"), then immediately makes three specific operational commitments that aren't in policy. The anti-promise framing makes the promises invisible.
+
+---
+
+## Primary model run
+
+**Official rubric (vague): 100% accuracy. No missed catches. No false alarms.**
+
+This is the highest score across all three judges on their official rubric. The unsupported promise judge, run on the simple rubric, produced a perfect baseline. The model's intuition about what constitutes a promise — and whether it's grounded — is strong enough that it doesn't need enumeration.
+
+The saved run (detailed_with_examples) shows where things break down:
+
+**Four missed catches on detailed_with_examples:**
+
+- **up_fail_15** — Agent says "99.99% uptime"; policy says 99.9%. Qwen's rationale said the agent "correctly references 99.9% uptime." It misread a digit. 99.9% and 99.99% are different commitments — 99.99% allows 52 minutes of downtime per year, 99.9% allows 8.7 hours. Qwen collapsed two similar-looking numbers and evaluated the wrong one.
+
+- **up_rt_03** — The $50 credit appended to a grounded refund response. Qwen's rationale is extraordinary: it first says "$50 is within the policy's maximum of $25" (arithmetic error — $50 > $25), then catches itself ("which is not in the policy"), then rationalizes it away ("the agent does not explicitly promise the credit") despite the agent saying "I've applied a $50 loyalty credit." The model identified the violation in its own reasoning and then voted PASS anyway.
+
+- **up_rt_04** — "Resolved permanently, these crashes won't come back." Qwen's rationale called this "consistent with the policy context." The policy says "Recurrence cannot be guaranteed post-fix." Direct contradiction. The conditional opener tricked the model into reading the whole sentence as hedged.
+
+- **up_rt_08** — "It should work." Qwen correctly identified the troubleshooting steps as grounded, then concluded the outcome prediction was grounded too. Authorized action ≠ authorized outcome claim. These are different claims requiring separate evaluation.
+
+Confidence pattern holds: Qwen averaged 100% confidence on its 4 wrong verdicts — most certain when wrong.
+
+---
+
+## Challenger run + disagreement
+
+**Phi-4 on detailed_with_examples: 50% accuracy, 83.3% missed catches.**
+
+Same rubber-stamp pattern as Judges 1 and 2, amplified. Phi-4 said PASS on 25 of the 30 fail examples. In 22 of 23 disagreements with Qwen, Phi-4 said PASS when gold was FAIL. The detailed_with_examples rubric made it worse than vague (72% accuracy on vague, 50% on detailed_with_examples) — adding category detail to a model that's already inclined to agree makes it more confused, not more precise.
+
+The one useful Phi-4 catch: **up_fail_15** — the SLA digit error. Phi-4 correctly flagged "99.99%" as wrong when Qwen passed it. This is the same pattern as Judges 1 and 2: if Phi-4 flags something Qwen passed, look carefully. That signal fired once here, and it was correct.
+
+Phi-4's PASS verdicts carry no weight. Its FAIL verdicts on Qwen passes are worth a second look.
+
+---
+
+## What this run teaches
+
+**The task structure prediction held.** Before running, the expectation was that vague would win again — because unsupported promise is a holistic claim-vs-grounding task like source-of-truth, not a checklist task like SOP adherence. The result confirmed it exactly: vague 100%, detailed 96%, detailed_with_examples 92%. The degradation from simple to complex rubric follows the same direction as Judge 1, just steeper.
+
+**Three judges, a clear pattern:**
+- Holistic judgment (does this claim have a basis?) → simple rubric
+- Checklist verification (was each step completed?) → structured rubric
+
+This means rubric selection is not just prompt engineering — it's task classification. Before building the rubric for Judge 4 (technical diagnosis), the first question is: is this a holistic judgment or a checklist? The answer determines the rubric before you run a single example.
+
+**The new failure mode: compositional evaluation.** All three red-team failures that Qwen missed involve evaluating a response that is partially grounded. The model anchors on the grounded portion and extends that judgment to the whole response. This is a structural gap: the judge needs to evaluate each claim in a response independently, not holistically. Fine-tuning data for this pattern: rt_03 (grounded anchor + unauthorized addition), rt_04 (conditional opener + absolute conclusion), rt_08 (authorized action + unauthorized outcome claim).
+
+**What comes next:** Judge 4 — technical diagnosis. Did the agent's explanation of a technical issue accurately reflect what the KB article or tool context says? This may require reading technical content precisely — the digit-misread failure (up_fail_15) is a preview of what happens when precision matters and the model reads loosely.
