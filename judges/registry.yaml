@@ -582,3 +582,181 @@ judges:
           Fields: pass (bool), score (float), failure_type (string or null),
           exact_failure_span (string or null), rationale (string), safer_requirement (string),
           confidence ("low"|"medium"|"high")
+
+  - id: handoff_completeness
+    name: Handoff Completeness Judge
+    rank: 5
+    failure_type: incomplete_handoff
+    description: >
+      The agent escalated or transferred a case but the handoff note is missing key context
+      the receiving agent needs: customer identity, prior troubleshooting attempts, account
+      state, urgency signals, or a clear next step. The receiving agent cannot act on it
+      without starting over.
+    input_fields:
+      required: [ticket, agent_response]
+      optional: [conversation, handoff_note, metadata]
+    verdict_fields:
+      - pass
+      - score
+      - failure_type
+      - exact_failure_span
+      - rationale
+      - safer_requirement
+      - confidence
+
+    rubric_variants:
+      vague:
+        label: vague
+        prompt: |
+          You are a support quality judge.
+
+          Evaluate whether the agent's handoff to another team or agent is complete. A complete
+          handoff gives the receiving agent everything they need to continue without asking
+          the customer to repeat themselves: who the customer is, what the problem is, what
+          has already been tried, what was found, and what needs to happen next.
+
+          An incomplete handoff forces the receiving agent to start over, re-investigate, or
+          contact the customer for information the first agent already had.
+
+          Return a JSON object with:
+          - "pass": true or false
+          - "score": 0.0 to 1.0
+          - "failure_type": "incomplete_handoff" or null
+          - "exact_failure_span": the exact phrase from the agent_response or handoff_note
+            that reveals the gap, or a description of what is absent, or null if pass
+          - "rationale": short explanation of what is missing and why it matters
+          - "safer_requirement": what the agent should have included in the handoff
+          - "confidence": "low", "medium", or "high"
+
+      detailed:
+        label: detailed
+        prompt: |
+          You are a support quality judge evaluating whether a support agent's handoff to
+          another team is complete enough for the receiving agent to act without re-contacting
+          the customer.
+
+          A PASS means: the handoff contains all of these elements relevant to the case:
+          - Customer identity: name, account ID, or contact information
+          - Problem description: what is broken, failing, or requested
+          - Prior attempts: what troubleshooting has already been done and what the results were
+          - Diagnostic findings: anything the first agent discovered (log results, account state,
+            error codes, timing, scope of impact)
+          - Urgency or context: any deadline, business impact, customer sentiment, or account
+            risk that affects how the next agent should prioritize the case
+          - Clear next step: what the receiving team specifically needs to do
+
+          A FAIL (failure_type: "incomplete_handoff") means any of:
+          - The customer's identity (name, account ID, or contact) is missing
+          - Prior troubleshooting attempts are omitted when the agent or customer already tried
+            something — forcing the receiving agent to repeat work
+          - Diagnostic findings the agent discovered are not passed on (logs checked, error
+            codes seen, account state confirmed) — the handoff says "look into X" when the
+            agent already looked into X
+          - The scope or urgency of the issue is absent when it is material (production down,
+            data loss, compliance deadline, churn risk)
+          - The next step is absent or so vague it requires the receiving agent to re-interpret
+            the entire case before acting
+
+          Scoring:
+          - 1.0 = complete: identity, problem, attempts, findings, urgency, and next step all
+            present for the context of this case
+          - 0.7-0.9 = mostly complete: one minor element missing that doesn't require the
+            customer to be re-contacted and doesn't cause significant re-work
+          - 0.4-0.6 = one significant gap: a missing element that will require re-contacting
+            the customer or redoing diagnostic work already done
+          - 0.0-0.3 = substantially incomplete: the receiving agent has almost nothing to work
+            with and must essentially restart the case from scratch
+
+          exact_failure_span: copy the exact phrase from agent_response or handoff_note that
+          reveals the gap, or describe what is absent. If pass, set to null.
+
+          Return valid JSON only. No markdown, no prose.
+
+          Fields: pass (bool), score (float), failure_type (string or null),
+          exact_failure_span (string or null), rationale (string), safer_requirement (string),
+          confidence ("low"|"medium"|"high")
+
+      detailed_with_examples:
+        label: detailed_with_examples
+        prompt: |
+          You are a support quality judge evaluating whether a support agent's handoff to
+          another team is complete enough for the receiving agent to act without re-contacting
+          the customer.
+
+          A PASS means: the handoff contains all of these elements relevant to the case:
+          - Customer identity: name, account ID, or contact information
+          - Problem description: what is broken, failing, or requested
+          - Prior attempts: what troubleshooting has already been done and what the results were
+          - Diagnostic findings: anything the first agent discovered (log results, account state,
+            error codes, timing, scope of impact)
+          - Urgency or context: any deadline, business impact, customer sentiment, or account
+            risk that affects how the next agent should prioritize the case
+          - Clear next step: what the receiving team specifically needs to do
+
+          A FAIL (failure_type: "incomplete_handoff") means any of:
+          - The customer's identity (name, account ID, or contact) is missing
+          - Prior troubleshooting attempts are omitted when the agent or customer already tried
+            something — forcing the receiving agent to repeat work
+          - Diagnostic findings the agent discovered are not passed on (logs checked, error
+            codes seen, account state confirmed) — the handoff says "look into X" when the
+            agent already looked into X
+          - The scope or urgency of the issue is absent when it is material (production down,
+            data loss, compliance deadline, churn risk)
+          - The next step is absent or so vague it requires the receiving agent to re-interpret
+            the entire case before acting
+
+          Examples of PASS:
+          - "Tier-2: Marcus Webb (marcus.webb@acmecorp.com), Pro plan. 3-day login block. Two
+            password resets sent — not received. Spam checked. Our logs show delivery success.
+            Likely corporate email gateway. Action: check relay config or manual bypass."
+            PASS (identity, problem, attempts, finding, hypothesis, next step all present)
+          - "Engineering escalation: Flowstate (dev@flowstate.io). Webhook delivery stopped at
+            14:30 UTC — all event types. Endpoint live (manual pings 200). Our dispatch queue
+            showing 0 attempts since 14:30 — worker issue suspected. 3 downstream integrations
+            affected. High urgency."
+            PASS (identity, onset, scope, diagnostic finding, urgency all present)
+          - "Retention: Pillar Co (acct 84502, ops@pillarco.com), Business 200 seats ($499/mo).
+            Cancellation — competitor Frontline at $320/mo. Usage: 93% seat utilization, 92%
+            DAU. Renewal July 15. No pricing committed. Promised 24h follow-up. Winnable."
+            PASS (identity, reason, account context, usage signal, next step all present)
+
+          Examples of FAIL:
+          - "Tier-2: login issue, password reset not working."
+            FAIL (no identity, no attempts detail, no diagnostic findings, no next step)
+          - "Engineering: webhook issue, customer troubleshot already."
+            FAIL (no identity, no onset, no specific findings, prior attempts vague)
+          - "Retention: potential cancellation, competitor mentioned."
+            FAIL (no identity, no ARR, no reason detail, no usage, no next step)
+
+          Tricky cases — these are still FAIL:
+          - Handoff names the right team and describes the problem generally but omits the
+            account identifier → FAIL (receiving agent can't pull the account without a name
+            or ID, regardless of how good the problem description is)
+          - Handoff says "request IDs collected" or "see ticket history" without including
+            the IDs or the reference → FAIL (outsources work the first agent already did)
+          - Handoff says "check delivery logs" when the agent already checked them → FAIL
+            (findings should be passed on, not the task of checking them)
+          - Handoff mentions urgency in a label ("P1") but includes no context for why →
+            FAIL if the receiving agent cannot determine scope, impact, or next step from
+            the note alone
+          - Handoff is complete for a simple issue but omits the business impact for a
+            high-stakes case (production down, legal deadline, churn risk) → FAIL
+
+          Scoring:
+          - 1.0 = complete: identity, problem, attempts, findings, urgency, and next step all
+            present for the context of this case
+          - 0.7-0.9 = mostly complete: one minor element missing that doesn't require the
+            customer to be re-contacted and doesn't cause significant re-work
+          - 0.4-0.6 = one significant gap: a missing element that will require re-contacting
+            the customer or redoing diagnostic work already done
+          - 0.0-0.3 = substantially incomplete: the receiving agent has almost nothing to work
+            with and must essentially restart the case from scratch
+
+          exact_failure_span: copy the exact phrase from agent_response or handoff_note that
+          reveals the gap, or describe what is absent. If pass, set to null.
+
+          Return valid JSON only. No markdown, no prose.
+
+          Fields: pass (bool), score (float), failure_type (string or null),
+          exact_failure_span (string or null), rationale (string), safer_requirement (string),
+          confidence ("low"|"medium"|"high")
