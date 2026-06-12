@@ -538,3 +538,126 @@ Three failures, one root cause, three variations on how it presents.
 ## What comes next
 
 Judge 5 is **handoff completeness** — when a support agent passes a case to a human agent, does the handoff note contain what the receiving agent needs? That's a different structure again: the judge evaluates completeness of a summary against an implicit standard of what a handoff should contain, rather than against an explicit provided context. The failure type is omission — what's missing from the note — which is closer to SOP adherence (checking for required elements) than to technical diagnosis (evaluating reasoning quality). Expect the structured rubric to perform well.
+
+---
+
+# Judge 5 — Handoff Completeness
+### When a case is escalated, does the next agent have what they need to act?
+
+---
+
+## Before you start — three things to get straight
+
+**What this judge catches:** A support handoff fails when the receiving agent has to re-contact the customer to start working. The failure isn't bad writing — it's missing information. A handoff note can be polished, urgent-sounding, and professionally formatted while omitting the account name, the diagnostic findings, or the exact next step. The judge checks six required elements: customer identity, problem description, prior attempts, diagnostic findings, urgency/context, and clear next step. One missing element is a fail.
+
+**Why it matters:** Every incomplete handoff restarts the customer experience from zero. The customer repeats themselves. The receiving agent loses the diagnostic context the first agent built up. For high-urgency cases — SSO down for 200 users, active account compromise — this isn't an inconvenience, it's a service failure. The failure type is `incomplete_handoff`, and unlike source-of-truth or unsupported-promise failures, it's entirely about what was omitted, not what was said incorrectly.
+
+**What a naive model misses:** The red-team traps are handoffs that feel complete because they name the right team, describe the symptom, and convey urgency. What they omit is the one element that makes action possible: the account ID, the collected request IDs, what the agent actually found in the logs. A judge that evaluates tone and direction instead of element-by-element presence will pass every red-team example. The question isn't "does this sound like a complete handoff?" — it's "could the receiving agent start working immediately without asking the customer anything?"
+
+---
+
+## The rubric ablation
+
+Three rubrics, one judge, materially different results at every step.
+
+**Vague rubric:** "Evaluate whether the handoff contains all necessary information for the receiving agent to act without re-contacting the customer."
+
+**Detailed rubric:** Listed all six required elements explicitly: identity, problem, prior attempts, findings, urgency, next step. Defined what counts as a pass or fail for each.
+
+**Detailed + examples rubric:** Added concrete examples of what each element looks like when present (pass) vs. absent or vague (fail). Showed the red-team pattern: "endpoint confirmed live" vs. "checked delivery logs, found 0 dispatch attempts since 14:30."
+
+| Rubric | Primary Accuracy | Primary False-Safe | Primary False-Unsafe |
+|---|---|---|---|
+| vague | 86% | 0% | 35% |
+| detailed | 98% | 3.4% | 0% |
+| detailed_with_examples | **100%** | **0%** | **0%** |
+
+**Winner: detailed_with_examples.** But the path to that winner is more instructive than the winner itself.
+
+The vague rubric produced **zero false-safes** — Qwen wasn't too lenient, it was too strict. A 35% false-unsafe rate means 7 out of 20 valid, complete handoffs were flagged as failures. Without an explicit checklist, Qwen invented requirements the gold standard didn't include. This is the opposite failure mode from false-safe, and it's equally wrong. A judge that over-flags valid responses is not deployable — it destroys trust in the signal just as badly as one that misses real failures.
+
+The detailed rubric corrected the over-flagging (0% false-unsafe) by naming the six elements explicitly, but left one false-safe: one incomplete handoff slipped through because the rubric described what each element is without showing what "absent" looks like concretely. The examples closed that gap.
+
+**The design lesson:** For checklist judges, the rubric needs to do two things simultaneously: tell the judge what to look for (explicit list) and anchor what "present" and "absent" mean in practice (examples). The list prevents over-flagging. The examples prevent under-flagging. Neither alone is sufficient.
+
+This is the same conclusion as Judge 2 (SOP adherence), now confirmed on a second independent checklist judge.
+
+---
+
+## What the examples teach
+
+**A pass example** looks like: customer identity (name, email, account ID), a specific description of what's happening and since when, what the first-line agent already tried and found, diagnostic context that advances the investigation, urgency or business impact, and a specific next step for the receiving team. The receiving agent can open their tools and start immediately. Example hc_pass_03: "Dispatch logs show 0 attempts since 14:30. Worker-side suspected. Eng to check queue consumer process." The engineer knows where to start.
+
+**A fail example** looks like: the right team is named, the issue category is described, a direction is suggested — but no account identity, no log findings, no specific next step beyond "investigate." Example hc_fail_08: "Engineering: session issues and data loss are affecting the customer. Please investigate." Engineering has to re-contact the customer to find the account, then redo all the diagnostic work the first agent could have done.
+
+**What makes the red-team examples hard:** Each one includes one element that sounds like it covers what's missing. hc_rt_02 mentions "endpoint confirmed live" and "request IDs collected" — both of which signal that the agent did real diagnostic work. But the request IDs weren't included in the note. "Collected" is not the same as "provided." Engineering still can't query the logs without the actual IDs. hc_rt_05 is the same trap: mentioning that request IDs exist is not the same as providing them. The judge has to check whether the element is present in the handoff note itself, not whether the agent did the work.
+
+The hardest red-team examples (hc_rt_08, hc_rt_10) are high-urgency cases — account compromise, enterprise SSO down — where the urgency framing makes the note feel thorough. The P1 label and the escalation tone create the impression of completeness. But a handoff note that doesn't include the account ID is unactionable at P1 just as at P3.
+
+---
+
+## Primary model run
+
+**Qwen on detailed_with_examples: 100% accuracy, 0% false-safe, 0% false-unsafe, 99.3% avg confidence.**
+
+This is the cleanest result across any judge so far. Qwen got every example correct, including all 10 red-team traps. The confidence score (99.3%) tells you Qwen wasn't uncertain — it wasn't hedging on the difficult examples and getting lucky. It was applying a clear pattern consistently.
+
+Why does handoff completeness produce a cleaner signal than technical diagnosis? The failure type is purely structural. Qwen doesn't have to evaluate whether a causal claim is mechanically sound (technical diagnosis) or whether an agent's certainty is epistemically justified (unsupported promise). It just has to verify that six named elements are present. That's a pattern-matching task, and pattern-matching is what small models do well when the rubric is explicit enough.
+
+The **span coverage of 100%** is worth noting: every fail verdict included a specific quote identifying the missing element. This is useful for operationalizing the judge — you get not just a pass/fail verdict but a pointer to exactly what needs to be added to make the handoff actionable.
+
+The vague rubric result (86% accuracy, 35% false-unsafe) shows that the clean result on detailed_with_examples is earned by the rubric design, not by the task being easy. Vague criteria turned a checklist check into an open-ended judgment call, and Qwen invented requirements that weren't part of the standard. The rubric design work is load-bearing.
+
+---
+
+## Challenger run + disagreement
+
+**Phi on detailed_with_examples: 74% accuracy, 43.3% false-safe, 0% false-unsafe, 13 disagreements.**
+
+Every one of the 13 disagreements was the same structure: gold=FAIL, Qwen=FAIL (correct), Phi=PASS (wrong). Phi never over-flagged — it only let failures through.
+
+The pattern across all 13 Phi errors is a single behavior: **inference over verification.** Phi accepted missing elements by reasoning that they could be inferred:
+
+- hc_rt_01: "prior attempts (none provided but implied)"
+- hc_rt_06: "urgency (implied by customer dissatisfaction)"
+- hc_fail_09: "prior attempts (none provided but implied)"
+- hc_rt_02: "customer identity (implied customer contacted support)"
+
+Phi is reading the handoff charitably — the way a human might read it if they already knew the context. That's the wrong evaluator behavior. A handoff is judged on what a receiving agent with no prior context can extract from the note alone. Phi is giving credit for what a handoff implies; the judge should give credit only for what it states.
+
+This is different from the Phi failure mode on technical diagnosis, where Phi simply struggled with longer prompts and produced parse errors. Here Phi outputs parse cleanly (94% JSON validity) but applies the wrong scoring logic. The problem is the reasoning, not the output format.
+
+Phi is not useful as a quality signal for this judge. All 13 of its disagreements were false-safes in the same direction, meaning it provides no information that Qwen's verdicts don't already give you — and the information it adds is systematically wrong.
+
+---
+
+## What this run teaches
+
+The run result is clean. The lesson from the run is about rubric design, not model capability.
+
+**Lesson 1: Checklist judges have two failure modes, not one.** Every discussion of judge quality focuses on false-safes — failures that slip through. But this run produced a 35% false-unsafe rate under the vague rubric — valid handoffs incorrectly flagged as failures. False-unsafe errors are equally disqualifying in production. A judge used to audit a support team will erode trust immediately if it flags responses that aren't actually failures. The rubric structure determines which failure mode you get, and explicit enumeration is the cure for both: it blocks invented requirements (which cause false-unsafes) and establishes the exact standard for presence (which prevents false-safes).
+
+**Lesson 2: Perfect scores reveal what the task structure requires.** Qwen achieving 100% on this judge doesn't mean handoff completeness is easy — it means the task structure is well-matched to what the rubric can specify and what the model can check. Source-of-truth peaked at 92%, unsupported-promise at 88%, technical diagnosis at 94%. Handoff completeness at 100% is because the six required elements are concrete and enumerable. You can name them. You can show them. The model can check them. Failure types that depend on epistemics (certainty without evidence), mechanism evaluation (does this cause produce this effect?), or causal reasoning require fundamentally harder rubric work to specify.
+
+**Lesson 3: The cross-judge pattern is now stable.** After five judges:
+- Holistic failure modes (source-of-truth, unsupported-promise): detailed rubric wins
+- Checklist failure modes (SOP adherence, handoff completeness): detailed_with_examples wins
+- Hybrid failure modes (technical diagnosis): detailed_with_examples wins
+
+The rubric selection decision is now predictable from the failure type classification. That's a useful building block for the remaining 10 judges.
+
+---
+
+## Wind-up — confirmed at perfect scores
+
+Zero Qwen failures means no corrected records. The wind-up pass for this judge is about pattern documentation, not error correction.
+
+The challenger's inference-over-verification pattern is documented in `data/future_finetune/handoff_completeness.jsonl`. It's not a Qwen problem — but it's a useful training signal for any future Phi fine-tuning work, and it clarifies what the rubric needs to state to block the behavior: not just "element must be present" but "credit is only given for explicit statement, not inferability from context."
+
+The vague-rubric false-unsafe pattern (35% rate) is the other documented finding. It joins the SOP adherence walkthrough as the second data point confirming that checklist judges break in the direction of over-flagging under vague criteria, while holistic judges break in the direction of under-flagging.
+
+---
+
+## What comes next
+
+Judge 6 is **escalation timing** — did the support agent escalate at the right moment, or did they wait too long? That's a judgment call with no checklist: it requires the judge to evaluate whether continued first-line effort was justified given the signals present at each step, or whether a threshold was crossed that should have triggered escalation sooner. Expect holistic rubric performance to matter more than checklist structure here — it's closer to source-of-truth and unsupported-promise in task structure than to SOP adherence or handoff completeness.
