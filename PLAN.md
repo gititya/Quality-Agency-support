@@ -1,8 +1,8 @@
-# Quality Agency Support: Sonnet Handoff Plan
+# Quality Agency Support: Five-Judge Completion Plan
 
 ## Summary
 
-Build `gititya/Quality-Agency-support` as a local customer-support quality judge agency for B2C and B2B SaaS. The system evaluates support responses, not generates them. It should build one judge at a time, stop for Adi’s approval after each model run, then commit that approved run before moving on.
+`gititya/Quality-Agency-support` is now scoped as a completed five-judge customer-support QA experiment, not the original 15-judge buildout. The system evaluates support responses, not generates them. The remaining work is to close the repo with an end-to-end pipeline over the five completed judges, one synthesis report, and one focused Qwen LoRA fine-tuning experiment.
 
 Use two MLX models only:
 
@@ -13,25 +13,17 @@ Use two MLX models only:
 
 The primary model is the default judge. The challenger model is used for disagreement analysis and learning, not as a fallback.
 
-## Judge Build Order
+## Completed Judge Scope
 
 | Rank | Judge | Failure Type |
 |---:|---|---|
-| 1 | Source-of-truth judge | Answered without using available policy, account, tool, or KB context |
-| 2 | SOP/process adherence judge | Skipped a required workflow step |
-| 3 | Unsupported promise judge | Promised outcome, refund, fix, escalation, or timeline without basis |
-| 4 | Technical diagnosis judge | Incorrect technical reasoning, missing repro, weak test plan, or fake certainty |
-| 5 | Handoff completeness judge | Human agent lacks key context, prior attempts, customer state, or next step |
-| 6 | Escalation timing judge | Escalated too late, too early, or without required evidence |
-| 7 | Failed-step repetition judge | Asked user to repeat an already failed troubleshooting step |
-| 8 | Answer completeness judge | Correct but missing required caveat, instruction, or next step |
-| 9 | Actual-question judge | Responded to an adjacent issue instead of the user’s actual question |
-| 10 | Customer-input verification judge | Acted before confirming required user/account details |
-| 11 | Sensitive-info judge | Requested, exposed, or mishandled unnecessary PII/security data |
-| 12 | Concision judge | Bloated, vague, repetitive, or low-signal answer |
-| 13 | Friction recovery judge | Ignored frustration, prior effort, or emotional escalation |
-| 14 | Next-action judge | No clear owner, next step, timeline, or resolution path |
-| 15 | Support-summary judge | Internal note is incomplete, misleading, or not actionable |
+| 1 | Source-of-truth | Answered without using available policy, account, tool, or KB context |
+| 2 | SOP/process adherence | Skipped a required workflow step |
+| 3 | Unsupported promise | Promised outcome, refund, fix, escalation, or timeline without basis |
+| 4 | Technical diagnosis | Incorrect technical reasoning, missing repro, weak test plan, or fake certainty |
+| 5 | Handoff completeness | Human agent lacks key context, prior attempts, customer state, or next step |
+
+The original plan included ten more judges: escalation timing, failed-step repetition, answer completeness, actual-question, customer-input verification, sensitive-info, concision, friction recovery, next-action, and support-summary. Those are intentionally out of scope for this completed repo. Do not build them unless the project is explicitly reopened.
 
 ## Implementation Structure
 
@@ -73,9 +65,9 @@ Use one shared verdict contract:
 }
 ```
 
-## Per-Judge Workflow
+## Completed Per-Judge Workflow
 
-For each judge, in rank order:
+Each completed judge followed this workflow:
 
 1. Create 40 seed examples: 20 pass, 20 fail.
 2. Create 10 false-safe red-team examples.
@@ -118,7 +110,7 @@ For later fine-tuned runs:
 judge: approve <judge-id> lora run <run-id>
 ```
 
-Work on branch `judge-factory-v1` and push after every approved commit.
+All five approved baseline runs are merged into `main`.
 
 ## Learning Additions
 
@@ -129,15 +121,15 @@ Include these in v1, not later:
 - **Judge disagreement report**: compare Qwen vs Phi vs gold label.
 - **Process graph judge**: for SOP/process adherence, score which required workflow step was skipped.
 
-Fine-tuning starts only after the top 3 judges have corrected gold data and baseline reports. First fine-tune target should be one judge with 150-200 examples and 20% held out.
+The five completed judges produced enough corrected and future-finetune examples to support one focused LoRA experiment. The remaining fine-tuning target is cross-judge false-safe behavior, not a sixth judge.
 
 ## End-to-End Support Quality Pipeline
 
-After all 15 narrow judges have approved baseline runs, build an E2E pipeline that runs the full judge agency against one support case and produces a single quality review.
+Build an E2E pipeline that runs the five completed judges against one support case and produces a single quality review.
 
 This should be a synthesis layer over the judges, not a replacement for them:
 
-- Run all applicable narrow judges on the same ticket/conversation/response bundle.
+- Run all five completed judges on the same ticket/conversation/response bundle when inputs are available.
 - Collect each judge verdict, exact failure span, confidence, and rationale.
 - Feed the collected verdicts into the best available synthesis model.
 - Output a support-quality report with:
@@ -150,7 +142,44 @@ This should be a synthesis layer over the judges, not a replacement for them:
 
 The synthesis model must not override judge evidence silently. If it disagrees with a judge, the report should show the disagreement.
 
-Build this only after the narrow judges exist, because the proof of work is the interpretable judge agency plus the E2E synthesis report.
+The E2E report is the final proof-of-work artifact: the interpretable judge outputs plus one readable QA synthesis.
+
+## Final Fine-Tuning Experiment
+
+After the E2E pipeline and report exist, run one focused Qwen LoRA experiment.
+
+Fine-tuning target:
+
+- Teach Qwen to reduce recurring false-safes across the five judges.
+- Do not train a broad generic support judge.
+- Do not train on Phi-only failures except as optional contrast notes.
+
+Primary training theme:
+
+> Do not pass a response just because part of it is grounded. Evaluate each claim, step, and handoff element independently, and require explicit evidence.
+
+Use corrected and future-finetune records from the five completed judges, especially:
+
+- source-of-truth: avoidance without contradiction, rationale hallucination
+- SOP adherence: self-assertion accepted as step evidence
+- unsupported promise: grounded anchor plus unauthorized addition
+- technical diagnosis: technically credible false certainty
+- handoff completeness: inference over verification as a contrast/pattern note
+
+Evaluation:
+
+- Rerun the five-judge E2E pipeline with base Qwen and LoRA Qwen.
+- Compare false-safe rate, false-unsafe rate, span quality, JSON validity, and synthesis quality.
+- The LoRA is successful only if it reduces false-safes without creating a meaningful false-unsafe increase.
+
+## Remaining Completion Sequence
+
+1. Update the repo docs to reflect five completed judges and the new close-out scope.
+2. Build the E2E support quality pipeline over the five completed judges.
+3. Run the five applicable judges on one support case.
+4. Synthesize the verdicts into one support QA report.
+5. Run one focused Qwen LoRA fine-tuning experiment and compare base vs fine-tuned Qwen.
+6. Add a final completion note and mark the repo complete.
 
 ## Test Plan
 
@@ -161,6 +190,8 @@ Build this only after the narrow judges exist, because the proof of work is the 
 - Model adapter test confirming both MLX model IDs run through the same judge interface.
 - Report test confirming every approved run produces reproducible artifacts before commit.
 - Wind-up test confirming primary-model failures are bucketed and corrected examples are written before the judge is marked complete.
+- E2E pipeline test confirming one support case can run through the five completed judges and produce a synthesis report.
+- Fine-tuning comparison test/report confirming base Qwen and LoRA Qwen are compared on the same five-judge suite.
 
 ## Assumptions
 
@@ -169,4 +200,4 @@ Build this only after the narrow judges exist, because the proof of work is the 
 - The project remains domain-neutral for B2C and B2B SaaS support.
 - Healthcare, diabetes, and personal finance domains are excluded from v1.
 - No large model sprawl: only Qwen primary and Phi challenger for v1.
-- Fine-tuning is not attempted until prompted baselines and rubric ablations prove what needs to improve.
+- The repo is considered complete after the five-judge E2E pipeline, one synthesis report, and one focused Qwen LoRA comparison are committed.

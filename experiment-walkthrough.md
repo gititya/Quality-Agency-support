@@ -660,4 +660,60 @@ The vague-rubric false-unsafe pattern (35% rate) is the other documented finding
 
 ## What comes next
 
-Judge 6 is **escalation timing** — did the support agent escalate at the right moment, or did they wait too long? That's a judgment call with no checklist: it requires the judge to evaluate whether continued first-line effort was justified given the signals present at each step, or whether a threshold was crossed that should have triggered escalation sooner. Expect holistic rubric performance to matter more than checklist structure here — it's closer to source-of-truth and unsupported-promise in task structure than to SOP adherence or handoff completeness.
+The original next judge would have been **escalation timing** — did the support agent escalate at the right moment, or did they wait too long? That remains a plausible future extension, but it is no longer part of this completed scope. The project now stops at five judges and moves to the E2E pipeline plus one fine-tuning comparison.
+
+---
+
+# Final Takeaways After Five Judges
+
+The original plan had 15 support QA judges. The project now stops intentionally at five completed judges:
+
+1. Source-of-truth
+2. SOP/process adherence
+3. Unsupported promise
+4. Technical diagnosis
+5. Handoff completeness
+
+The remaining ten planned judges — escalation timing, failed-step repetition, answer completeness, actual-question, customer-input verification, sensitive-info, concision, friction recovery, next-action, and support-summary — are out of scope for this completed experiment.
+
+## Biggest takeaway
+
+The biggest learning is not that one model or one rubric wins. The biggest learning is that **support QA failures have different task shapes, and the rubric has to match the task shape.**
+
+- Holistic claim/evidence judges need simple rubrics.
+- Checklist/completeness judges need explicit required elements and examples.
+- Hybrid reasoning judges need detailed examples that show the boundary between plausible and sound reasoning.
+
+That means rubric design is not generic prompt engineering. It is task classification. Before building a judge, classify the failure mode first: holistic, checklist, or hybrid. The rubric choice follows from that classification.
+
+## Cross-judge pattern
+
+| Judge | Task shape | Winning rubric | Main lesson |
+|---|---|---|---|
+| Source-of-truth | Holistic claim vs context | Vague/simple | "Does not contradict context" is not the same as "uses context." |
+| SOP adherence | Checklist/sequence | Detailed with examples | Step mention is not always step evidence. |
+| Unsupported promise | Holistic claim grounding | Vague/simple | A small unsupported clause can invalidate an otherwise grounded answer. |
+| Technical diagnosis | Hybrid reasoning + checklist | Detailed with examples | Technical specificity is not diagnostic soundness. |
+| Handoff completeness | Checklist/completeness | Detailed with examples | Handoff elements must be explicit, not inferred. |
+
+## Model takeaway
+
+Qwen3-4B is the only viable primary local judge from these runs. It produced useful structured verdicts, strong JSON reliability, and clear failure patterns.
+
+Phi-4-mini is not a useful standalone judge here. Its recurring failure mode is charitable passing: it infers missing evidence, treats plausible explanations as sufficient, and lets bad responses through. Its value is limited to disagreement analysis: when Phi flags something Qwen passed, inspect it; Phi PASS verdicts carry little weight.
+
+## What should happen next
+
+Do not build the remaining ten judges. The next useful work is to turn the five completed judges into a proof-of-work pipeline:
+
+1. Build an E2E support quality pipeline that runs the five completed judges on one support case.
+2. Run all applicable judges on one realistic support case.
+3. Synthesize the verdicts into one QA report: what went well, what failed, what is risky, what needs human review, and the overall quality grade.
+4. Run one focused Qwen LoRA experiment on the recurring false-safe patterns from the five judges.
+5. Compare base Qwen vs LoRA Qwen on the same five-judge E2E case set.
+
+The fine-tuning target should be narrow:
+
+> Do not pass a response just because part of it is grounded. Evaluate each claim, step, and handoff element independently, and require explicit evidence.
+
+This target absorbs the recurring misses across the five runs: avoidance without contradiction, rationale hallucination, self-assertion as evidence, grounded anchor plus unsupported addition, technically credible false certainty, and inference over verification.
