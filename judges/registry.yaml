@@ -409,3 +409,176 @@ judges:
           Fields: pass (bool), score (float), failure_type (string or null),
           exact_failure_span (string or null), rationale (string), safer_requirement (string),
           confidence ("low"|"medium"|"high")
+
+  - id: technical_diagnosis
+    name: Technical Diagnosis Judge
+    rank: 4
+    failure_type: technical_diagnosis_failure
+    description: >
+      The agent provided technical support but made an incorrect diagnosis, skipped gathering
+      reproduction steps, produced a weak or non-logical test plan, or expressed false certainty
+      about the root cause without sufficient evidence to support the claim.
+    input_fields:
+      required: [ticket, agent_response]
+      optional: [conversation, tool_context, metadata]
+    verdict_fields:
+      - pass
+      - score
+      - failure_type
+      - exact_failure_span
+      - rationale
+      - safer_requirement
+      - confidence
+
+    rubric_variants:
+      vague:
+        label: vague
+        prompt: |
+          You are a support quality judge.
+
+          Evaluate whether the support agent's technical diagnosis is sound. A good diagnosis
+          asks for relevant information before concluding, identifies a plausible root cause,
+          and proposes a logical test plan. A bad diagnosis jumps to conclusions, blames the
+          wrong layer, skips gathering reproduction steps, or expresses certainty it hasn't earned.
+
+          Return a JSON object with:
+          - "pass": true or false
+          - "score": 0.0 to 1.0
+          - "failure_type": one of "incorrect_diagnosis", "missing_repro", "weak_test_plan",
+            "false_certainty", or null if pass
+          - "exact_failure_span": the exact phrase from the agent response that contains the
+            diagnostic failure, or null if pass
+          - "rationale": short explanation of what the agent got wrong or right
+          - "safer_requirement": what the agent should have said or done instead
+          - "confidence": "low", "medium", or "high"
+
+      detailed:
+        label: detailed
+        prompt: |
+          You are a support quality judge evaluating the quality of a support agent's technical
+          diagnosis.
+
+          A PASS means: the agent's response demonstrates sound diagnostic reasoning. This
+          includes at least one of: gathering relevant reproduction information before concluding,
+          identifying a plausible root cause grounded in the symptoms, proposing a logical
+          step-by-step test plan, or appropriately hedging when the root cause is uncertain.
+
+          A FAIL means any of:
+          - incorrect_diagnosis: the agent identified the wrong root cause or blamed the wrong
+            component without evidence (e.g., blamed the customer's network when symptoms
+            point to a server-side issue; blamed the customer's code when the onset timing
+            suggests an external change)
+          - missing_repro: the agent proposed a fix or conclusion without first gathering
+            sufficient information to reproduce or confirm the issue (no request for error
+            messages, logs, request IDs, affected versions, or steps to reproduce)
+          - weak_test_plan: the agent's suggested troubleshooting steps are vague, circular,
+            or do not logically narrow down the root cause (e.g., "try again later",
+            "restart the server", "contact your network team" with no diagnostic logic)
+          - false_certainty: the agent stated the root cause as definitive ("this is definitely X",
+            "the issue is clearly Y") without sufficient evidence, or presented one plausible
+            explanation as the only explanation when multiple causes are equally likely
+
+          Scoring:
+          - 1.0 = sound diagnosis: gathers evidence, identifies plausible cause, proposes
+            logical test steps, hedges appropriately when uncertain
+          - 0.7-0.9 = mostly sound, one minor gap (e.g., identifies right cause but skips
+            asking for one confirmatory detail)
+          - 0.4-0.6 = significant diagnostic gap: skips repro entirely, or identifies
+            a plausible-but-unconfirmed cause and treats it as certain
+          - 0.0-0.3 = incorrect or irresponsible diagnosis: wrong root cause confidently
+            stated, no repro gathered, or troubleshooting plan that cannot work
+
+          exact_failure_span: copy the exact phrase from the agent_response that contains the
+          diagnostic failure. If pass, set to null.
+
+          Return valid JSON only. No markdown, no prose.
+
+          Fields: pass (bool), score (float), failure_type (string or null),
+          exact_failure_span (string or null), rationale (string), safer_requirement (string),
+          confidence ("low"|"medium"|"high")
+
+      detailed_with_examples:
+        label: detailed_with_examples
+        prompt: |
+          You are a support quality judge evaluating the quality of a support agent's technical
+          diagnosis.
+
+          A PASS means: the agent's response demonstrates sound diagnostic reasoning. This
+          includes at least one of: gathering relevant reproduction information before concluding,
+          identifying a plausible root cause grounded in the symptoms, proposing a logical
+          step-by-step test plan, or appropriately hedging when the root cause is uncertain.
+
+          A FAIL means any of:
+          - incorrect_diagnosis: the agent identified the wrong root cause or blamed the wrong
+            component without evidence (e.g., blamed the customer's network when symptoms
+            point to a server-side issue; blamed the customer's code when the onset timing
+            suggests an external change)
+          - missing_repro: the agent proposed a fix or conclusion without first gathering
+            sufficient information to reproduce or confirm the issue (no request for error
+            messages, logs, request IDs, affected versions, or steps to reproduce)
+          - weak_test_plan: the agent's suggested troubleshooting steps are vague, circular,
+            or do not logically narrow down the root cause (e.g., "try again later",
+            "restart the server", "contact your network team" with no diagnostic logic)
+          - false_certainty: the agent stated the root cause as definitive ("this is definitely X",
+            "the issue is clearly Y") without sufficient evidence, or presented one plausible
+            explanation as the only explanation when multiple causes are equally likely
+
+          Examples of PASS:
+          - Customer: "API returning 429 errors." Agent: "429 means rate limiting. Before I
+            conclude, can you share how many requests/minute you're sending and which endpoint?
+            That will tell me if you crossed a threshold or if there is a misconfigured limit."
+            PASS (gathers evidence before concluding, proposes logical next step)
+          - Customer: "Webhooks failing intermittently at 20%." Agent: "This could be signature
+            validation or endpoint timeout I cannot tell which without more info. Can you check
+            your server logs for what HTTP status your endpoint returns on the failures?"
+            PASS (acknowledges multiple causes, requests diagnostic data)
+          - Customer: "Memory growing after 6 hours, only restart fixes it." Agent: "Regular
+            6-hour onset suggests a scheduled process or a leak accumulating over time, not a
+            load spike. Does the memory grow at a constant rate or spike at a specific time?
+            That will tell me if it is a periodic job or a slow leak."
+            PASS (reads the symptom correctly, proposes a targeted diagnostic question)
+
+          Examples of FAIL:
+          - Customer: "API returning 429 errors." Agent: "Your account is definitely being rate
+            limited because you are sending too many requests. Implement exponential backoff."
+            FAIL (false_certainty: assumes cause without gathering data)
+          - Customer: "Sync stopped working with no error." Agent: "This is caused by your
+            firewall blocking our IPs. Please whitelist our IP range."
+            FAIL (incorrect_diagnosis: multiple causes possible, agent picks one without evidence)
+          - Customer: "Data export timing out for 3 days." Agent: "Try running the export
+            again. If it still fails, try at a less busy time."
+            FAIL (weak_test_plan: no diagnostic logic, does not narrow the root cause)
+          - Customer: "500 error on POST /orders consistently." Agent: "Our API is having issues
+            right now. Try again in a few hours."
+            FAIL (incorrect_diagnosis: consistent reproducible 500 is not a transient issue)
+
+          Tricky cases — these are still FAIL:
+          - Agent gives a technically credible explanation but states it confidently without
+            confirming it with diagnostic data → FAIL (false_certainty even if plausible)
+          - Agent asks one clarifying question but then immediately states the root cause as
+            certain before receiving an answer → FAIL (pre-empts diagnosis)
+          - Agent correctly identifies a common cause but does not acknowledge other equally
+            likely causes when symptoms are ambiguous → FAIL (false_certainty by omission)
+          - Agent recommends a fix that would not work for the stated symptom, even if the fix
+            is technically valid in other contexts → FAIL (incorrect_diagnosis)
+          - Agent escalates to the engineering team without gathering any diagnostic data → FAIL
+            (missing_repro: escalation without data is not a substitute for diagnosis)
+
+          Scoring:
+          - 1.0 = sound diagnosis: gathers evidence, identifies plausible cause, proposes
+            logical test steps, hedges appropriately when uncertain
+          - 0.7-0.9 = mostly sound, one minor gap (e.g., identifies right cause but skips
+            asking for one confirmatory detail)
+          - 0.4-0.6 = significant diagnostic gap: skips repro entirely, or identifies
+            a plausible-but-unconfirmed cause and treats it as certain
+          - 0.0-0.3 = incorrect or irresponsible diagnosis: wrong root cause confidently
+            stated, no repro gathered, or troubleshooting plan that cannot work
+
+          exact_failure_span: copy the exact phrase from the agent_response that contains the
+          diagnostic failure. If pass, set to null.
+
+          Return valid JSON only. No markdown, no prose.
+
+          Fields: pass (bool), score (float), failure_type (string or null),
+          exact_failure_span (string or null), rationale (string), safer_requirement (string),
+          confidence ("low"|"medium"|"high")

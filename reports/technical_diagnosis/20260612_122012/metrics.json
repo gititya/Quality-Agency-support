@@ -1,0 +1,101 @@
+{
+  "primary": {
+    "total": 50,
+    "json_validity_rate": 1.0,
+    "scoreable": 50,
+    "binary_accuracy": 0.94,
+    "false_safe_rate": 0.1,
+    "false_unsafe_rate": 0.0,
+    "avg_confidence_on_correct": 0.602,
+    "avg_confidence_on_incorrect": 0.67,
+    "span_coverage": 0.9
+  },
+  "challenger": {
+    "total": 50,
+    "json_validity_rate": 0.98,
+    "scoreable": 50,
+    "binary_accuracy": 0.64,
+    "false_safe_rate": 0.6,
+    "false_unsafe_rate": 0.0,
+    "avg_confidence_on_correct": 0.864,
+    "avg_confidence_on_incorrect": 1.0,
+    "span_coverage": 0.4
+  },
+  "rubric_comparison": [
+    {
+      "rubric": "vague",
+      "metrics": {
+        "total": 50,
+        "json_validity_rate": 1.0,
+        "scoreable": 50,
+        "binary_accuracy": 0.92,
+        "false_safe_rate": 0.133,
+        "false_unsafe_rate": 0.0,
+        "avg_confidence_on_correct": 0.785,
+        "avg_confidence_on_incorrect": 0.67,
+        "span_coverage": 1.0
+      },
+      "challenger_metrics": {
+        "total": 50,
+        "json_validity_rate": 1.0,
+        "scoreable": 50,
+        "binary_accuracy": 0.78,
+        "false_safe_rate": 0.367,
+        "false_unsafe_rate": 0.0,
+        "avg_confidence_on_correct": 0.674,
+        "avg_confidence_on_incorrect": 1.0,
+        "span_coverage": 0.633
+      }
+    },
+    {
+      "rubric": "detailed",
+      "metrics": {
+        "total": 50,
+        "json_validity_rate": 1.0,
+        "scoreable": 50,
+        "binary_accuracy": 0.88,
+        "false_safe_rate": 0.2,
+        "false_unsafe_rate": 0.0,
+        "avg_confidence_on_correct": 0.789,
+        "avg_confidence_on_incorrect": 0.945,
+        "span_coverage": 0.8
+      },
+      "challenger_metrics": {
+        "total": 50,
+        "json_validity_rate": 0.96,
+        "scoreable": 50,
+        "binary_accuracy": 0.5,
+        "false_safe_rate": 0.833,
+        "false_unsafe_rate": 0.0,
+        "avg_confidence_on_correct": 0.826,
+        "avg_confidence_on_incorrect": 0.907,
+        "span_coverage": 0.167
+      }
+    },
+    {
+      "rubric": "detailed_with_examples",
+      "metrics": {
+        "total": 50,
+        "json_validity_rate": 1.0,
+        "scoreable": 50,
+        "binary_accuracy": 0.94,
+        "false_safe_rate": 0.1,
+        "false_unsafe_rate": 0.0,
+        "avg_confidence_on_correct": 0.602,
+        "avg_confidence_on_incorrect": 0.67,
+        "span_coverage": 0.9
+      },
+      "challenger_metrics": {
+        "total": 50,
+        "json_validity_rate": 0.98,
+        "scoreable": 50,
+        "binary_accuracy": 0.64,
+        "false_safe_rate": 0.6,
+        "false_unsafe_rate": 0.0,
+        "avg_confidence_on_correct": 0.864,
+        "avg_confidence_on_incorrect": 1.0,
+        "span_coverage": 0.4
+      }
+    }
+  ]
+}
