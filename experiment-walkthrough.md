@@ -395,3 +395,146 @@ This means rubric selection is not just prompt engineering — it's task classif
 **The new failure mode: compositional evaluation.** All three red-team failures that Qwen missed involve evaluating a response that is partially grounded. The model anchors on the grounded portion and extends that judgment to the whole response. This is a structural gap: the judge needs to evaluate each claim in a response independently, not holistically. Fine-tuning data for this pattern: rt_03 (grounded anchor + unauthorized addition), rt_04 (conditional opener + absolute conclusion), rt_08 (authorized action + unauthorized outcome claim).
 
 **What comes next:** Judge 4 — technical diagnosis. Did the agent's explanation of a technical issue accurately reflect what the KB article or tool context says? This may require reading technical content precisely — the digit-misread failure (up_fail_15) is a preview of what happens when precision matters and the model reads loosely.
+
+---
+
+# Judge 4 — Technical Diagnosis
+### Did the agent reason soundly about what was wrong and how to find out?
+
+---
+
+## Before you start — three things to get straight
+
+**What this judge catches.** A support agent answering a technical question can fail in four distinct ways: they can identify the wrong root cause (blaming the customer's network when the symptoms point to a server-side regression), skip gathering the information needed to reproduce the issue (prescribing a fix before asking for logs, error codes, or repro steps), produce a troubleshooting plan with no diagnostic logic ("try again later," "restart the server"), or express certainty about the diagnosis before earning it ("this is definitely caused by X"). The failure type is `technical_diagnosis_failure`, with four subtypes: `incorrect_diagnosis`, `missing_repro`, `weak_test_plan`, and `false_certainty`.
+
+**Why it matters.** A wrong diagnosis wastes the customer's time and can make things worse — increasing a Kubernetes memory limit masks a leak instead of fixing it, doubling a connection pool size hides a resource exhaustion caused by unreleased connections. More importantly, an agent who prescribes a fix with false certainty teaches the customer the wrong mental model of their own system. The customer comes away thinking they know what happened when they don't. A correct "I don't know yet, here's how we'll find out" is more valuable than a confident wrong answer.
+
+**What a naive model misses.** The subtle failure in this judge is not the obvious one — "definitely X" with no evidence. The subtle failure is technically credible false certainty: an agent who names a real mechanism (HMAC timestamp windows, DNS resolution, swallowed exceptions) and prescribes the right fix for that mechanism — but never confirms the mechanism is actually what's happening. The agent sounds expert. The reasoning is internally coherent. The model needs to ask: did they verify this, or did they just assert it? That distinction is harder than catching someone who said "definitely" in a sentence.
+
+---
+
+## The three marking schemes
+
+Before running, you can predict what the rubric outcome will be if you ask the right question: is this a holistic judgment task or a checklist task?
+
+- **Judge 1 (source-of-truth):** Holistic — does this claim have a basis? → simple rubric wins.
+- **Judge 2 (SOP adherence):** Checklist — did each step occur? → structured rubric wins.
+- **Judge 3 (unsupported promise):** Holistic → simple rubric wins.
+- **Judge 4 (technical diagnosis):** Both.
+
+Technical diagnosis has a checklist component: did the agent ask for repro steps? Did they propose test steps? But it also has a holistic component: is the reasoning pattern sound, or is it just dressing up a pre-formed conclusion? Neither simple nor structured rubric alone captures both. This predicts that detailed_with_examples — the rubric that provides both structure and worked examples of the boundary — will win.
+
+**Vague:** "Did the agent reason soundly? A bad diagnosis jumps to conclusions, blames the wrong layer, or expresses certainty it hasn't earned."
+
+**Detailed:** Enumerates the four failure subtypes with definitions and a scoring scale. Tells the model what `missing_repro` means, what `false_certainty` means, what `weak_test_plan` looks like.
+
+**Detailed with examples:** Same enumeration, plus three worked pass/fail pairs, plus a "tricky cases" section explicitly covering: technically credible false certainty, confirmatory steps masquerading as evidence-gathering, and incorrect-but-confirmatory data requests.
+
+| Rubric | Accuracy | Missed catches | False alarms | Span coverage |
+|---|---|---|---|---|
+| vague | 92% | 13.3% | 0% | 100% |
+| detailed | 88% | 20.0% | 0% | 80% |
+| **detailed_with_examples ← official** | **94%** | **10.0%** | **0%** | **90%** |
+
+The prediction held. The worked examples were necessary — not because the model needed a definition of false certainty, but because it needed to see what false certainty looks like when it's disguised as competence. The "tricky cases" section in the rubric didn't eliminate Qwen's red-team misses (3 still slipped through), but it was the difference between 13.3% and 10% false-safe rate.
+
+Notice what didn't happen: zero false alarms on all three rubrics. The technical diagnosis judge is not trigger-happy. Qwen never incorrectly flagged a sound response. Its errors are exclusively in one direction — passing responses it should have flagged. The asymmetry matters: it means the judge has a precision problem, not a recall problem.
+
+---
+
+## What the examples teach
+
+**A pass** looks like an agent who gathers evidence before concluding. Not necessarily asking for everything — sometimes two targeted questions are enough to demonstrate diagnostic hygiene. The critical pattern: the agent doesn't commit to a root cause before receiving diagnostic data. They might name plausible causes ("this could be X or Y") and then ask a question that discriminates between them. That's sound diagnosis even before the answer arrives.
+
+**An unambiguous fail** looks like one of four things: "your issue is definitely X" (false certainty), "try again later" (weak test plan), "this is caused by your firewall" based on no evidence (incorrect diagnosis), or "here's the fix" without a single diagnostic question (missing repro). These are easy catches — the model just needs to notice the absence of evidence-gathering or the presence of certainty language.
+
+**What makes the red-team hard.** Ten examples, all `label: false`, all designed to look like expert responses:
+
+- **Technically credible false certainty** (rt_01, rt_02, rt_06): The agent names a real mechanism — HMAC timestamp windows, gRPC context deadline propagation, SDK telemetry overhead — and prescribes the right fix for that mechanism. The explanation is accurate. The code example is correct. The problem is that the mechanism has never been confirmed as the actual cause. A model that evaluates "is this explanation coherent?" will pass these. The judge needs to ask "did the agent confirm this before prescribing?"
+
+- **Prescription disguised as investigation** (rt_03): Agent says "almost always caused by swallowed exceptions, check your handler code, add structured logging." The recommendation to add logging sounds like a diagnostic step. But the agent already stated the cause before suggesting any investigation. The logging was prescribed to confirm a conclusion, not to generate evidence for an open question. The sequence matters.
+
+- **Incorrect mechanism + confirmatory action** (rt_07): Agent says "selective delivery to one endpoint is a DNS issue" then asks for nslookup results. The data-gathering request appears diagnostic. But DNS failure is mechanically inconsistent with selective delivery — DNS failure produces consistent errors, not silent delivery to one endpoint and not the other. The agent gathered data to confirm a diagnosis that doesn't fit the symptom.
+
+- **Normalized failure** (rt_08): Agent explains that transaction isolation conflicts are "expected behavior — that's what Serializable isolation is designed to do" and recommends adding retry logic. This is partially correct advice. But a sudden increase in isolation conflicts under a specific load pattern is a signal worth investigating, not normalizing. The agent closed the diagnostic loop without asking whether this rate of conflicts is new.
+
+The common thread in all ten red-team examples: the agent sounds competent. They use technical vocabulary correctly. They don't say "definitely." They reference real mechanisms. What they don't do is verify.
+
+---
+
+## Primary model run (Qwen3-4B)
+
+**Official rubric (detailed_with_examples): 94% accuracy, 10% false-safe rate, 0% false-unsafe, 100% JSON validity, 90% span coverage.**
+
+The 94% accuracy is Qwen's best result across all four judges. The 10% false-safe rate is its second best (Judge 3 on vague rubric hit 0%, but that was a different task structure). The 0% false-unsafe and 100% JSON validity are consistent with the pattern across all judges — Qwen almost never over-flags and almost never produces malformed output.
+
+The 90% span coverage is worth noting. When Qwen correctly flags a failure, it points to the right phrase 90% of the time. That's actionable — a reviewer looking at a FAIL verdict can see exactly which sentence in the agent's response caused it.
+
+**Qwen's 3 failures — all false-safes, all red-team:**
+
+1. **td_rt_01** — Agent said the HMAC error "confirms this is a webhook signature validation issue" and prescribed NTP sync. Qwen's rationale: "correctly identifies the HMAC signature error as a validation issue and links it to server clock synchronization. The agent proposes a logical fix." It evaluated the coherence of the explanation rather than whether the cause was confirmed. A response can have a logical fix for an unconfirmed cause — that's still false certainty. Qwen conflated "internally consistent" with "diagnostically sound."
+
+2. **td_rt_03** — Agent said queue failures "are almost always caused by an exception being swallowed" and recommended adding logging. Qwen's rationale: "correctly identifies a plausible root cause and proposes a logical step." The issue is sequence: the causal claim came before the investigation recommendation. Adding logging to confirm a pre-stated cause is not the same as adding logging to investigate an unknown cause. Qwen didn't check whether the investigation step preceded or followed the conclusion.
+
+3. **td_rt_07** — Agent said selective delivery "is a DNS resolution issue" and asked for nslookup results. Qwen's rationale: "identifies a plausible root cause and proposes a logical test plan by requesting diagnostic data." It saw data-gathering and scored the response as sound. It didn't check whether DNS failure mechanically produces the described symptom (selective delivery, not consistent failure). A confirmatory nslookup after a wrong diagnosis is not sound diagnosis — it's looking for evidence that you've already decided is there.
+
+**The pattern across all three:** Qwen evaluated the quality of the agent's explanation and the presence of some next step. It didn't evaluate the logical order (did conclusion come before or after evidence?), the mechanism-symptom fit (does this cause produce this effect?), or the presence of alternative hypotheses. It's one level of diagnostic quality checking, but not all of them.
+
+---
+
+## Challenger run + disagreement
+
+**Phi-4 on detailed_with_examples: 64% accuracy, 60% false-safe rate, 98% JSON validity, 40% span coverage.**
+
+15 disagreements, all in one direction: gold=FAIL, primary=FAIL, challenger=PASS. Phi-4 passed every single response that Qwen correctly flagged in their disagreements. Not one disagreement involved Phi catching something Qwen missed.
+
+This is the most lopsided challenger performance across all four judges. Judge 1: Phi missed 80% of failures. Judge 2: 63.3%. Judge 3: 83.3%. Judge 4: 60%. The improvement in raw false-safe rate looks better than prior judges, but the disagreement pattern is revealing: Phi-4 agreed with all of Qwen's 20 correct PASS verdicts and agreed with Qwen on 15 of 20 correct FAIL verdicts — but on the remaining 15 FAILs, Phi said PASS every time.
+
+Phi-4's failure mode on this judge isn't a calibration issue — it's a conceptual one. It doesn't have a working model of what diagnostic soundness means. It can recognize obvious badness ("try again later"), but it cannot distinguish between "sounds like an expert explaining a known mechanism" and "is actually performing a diagnostic investigation." That's the entire hard case for this judge, and Phi-4 can't make the distinction.
+
+Span coverage tells the same story: 40% vs Qwen's 90%. When Phi-4 does flag a failure, it often can't locate the specific phrase that's wrong. It produces verdicts without pointing to evidence.
+
+Two parse errors (missing `safer_requirement` and `confidence` fields on `td_fail_07` and `td_rt_08`) — the same field-dropping behavior seen in Judge 2's detailed rubric. Phi-4 occasionally truncates its JSON output under length pressure. This is consistent, not random.
+
+**What the disagreement structure tells you about the task:** When both models agree on a FAIL, it's usually an obvious one — explicit certainty language, missing repro, "try again later." When they disagree — Qwen says FAIL, Phi says PASS — it's exclusively the subtle cases: technically credible explanations, confirmatory steps after pre-stated conclusions, mechanisms that don't fit the symptom. That's a useful signal. If you're reviewing outputs manually, the disagreement list is a prioritized queue of the hard cases.
+
+---
+
+## What this run teaches
+
+**Rubric pattern now covers all four structural types.** Across four judges we've established a reliable prediction:
+- Holistic claim evaluation → simple rubric (Judge 1, 3)
+- Checklist sequence verification → structured rubric (Judge 2)
+- Mixed (holistic reasoning quality + checklist components) → detailed_with_examples (Judge 4)
+
+Before building a rubric for any new judge, classify the task first. The rubric structure follows from the task type. This is more reliable than trying all three and picking the winner — though you still need to run all three to confirm.
+
+**94% accuracy on a hard task is meaningful.** Technical diagnosis requires the model to evaluate reasoning quality, not just fact-matching. The 6% miss rate (3 examples) is concentrated in a specific, nameable pattern: technically credible false certainty. That pattern is now documented in `data/future_finetune/technical_diagnosis.jsonl` with corrected verdicts and teaching notes.
+
+**The fine-tuning target is precise.** Unlike Judge 1 where misses spread across "avoidance without contradiction" and "rationale hallucination," all three of Qwen's Judge 4 misses share one root cause: it doesn't check logical sequence or mechanism-symptom fit when evaluating a technically plausible explanation. That's a teachable pattern — the fine-tuning examples are three clean demonstrations of it.
+
+**Phi-4's failure reveals something about the task's difficulty.** The fact that Phi-4 got 60% false-safe rate on a judge where Qwen got 10% is a strong signal that technical diagnosis requires reasoning capability, not just pattern recognition. You can't get close to Qwen's performance here by being good at text matching. The gap between 64% accuracy and 94% accuracy (30 percentage points) is the largest between the two models across all four judges — and it's almost entirely in the red-team examples. Small models that haven't been fine-tuned to reason about reasoning will struggle with this judge more than any of the others.
+
+**Overconfidence holds.** Qwen's average confidence on correct verdicts: 60.2%. On incorrect verdicts: 67.0%. The pattern is the same as all previous judges — the model is slightly more certain when it's wrong than when it's right. The gap is smaller here than in Judge 3 (where wrong confidence was 100%), which may reflect that the detailed_with_examples rubric produced more calibrated outputs overall.
+
+---
+
+## Wind-up — what the 3 red-team misses teach
+
+Three failures, one root cause, three variations on how it presents.
+
+**The pattern:** Qwen evaluates whether an agent's explanation is internally coherent and whether some next step was proposed. It doesn't evaluate whether evidence was gathered before the conclusion was stated, whether the named mechanism produces the described symptom, or whether alternative causes were considered. Those three gaps produced exactly three misses.
+
+**td_rt_01 teaches:** Technical specificity (naming the mechanism correctly) is not the same as diagnostic confirmation (verifying the mechanism is actually active). The judge needs to ask: did the agent establish that X is happening, or did the agent assume X and prescribe accordingly?
+
+**td_rt_03 teaches:** The direction of inference matters. "I suspect X — let's check" is investigation. "This is caused by X — here's how to confirm" is prescription with extra steps. The presence of a checking step doesn't make a response diagnostic if the conclusion preceded the check.
+
+**td_rt_07 teaches:** Mechanism-symptom fit is a required check, not an optional one. Before accepting a diagnosis, the judge needs to ask: does this named cause actually produce this described effect? If DNS failure causes consistent errors and the symptom is selective delivery, the diagnosis is incorrect regardless of how confident the data-gathering request sounds.
+
+**For fine-tuning:** These three patterns are in `data/future_finetune/technical_diagnosis.jsonl`. They need 10–15 additional supporting examples each before they're strong enough as fine-tuning signal. Priority order: rt_07 pattern (mechanism-symptom fit) is the most generalizable because it applies to any judge that evaluates causal claims, not just technical diagnosis.
+
+---
+
+## What comes next
+
+Judge 5 is **handoff completeness** — when a support agent passes a case to a human agent, does the handoff note contain what the receiving agent needs? That's a different structure again: the judge evaluates completeness of a summary against an implicit standard of what a handoff should contain, rather than against an explicit provided context. The failure type is omission — what's missing from the note — which is closer to SOP adherence (checking for required elements) than to technical diagnosis (evaluating reasoning quality). Expect the structured rubric to perform well.
