@@ -31,7 +31,7 @@ The pattern across all 13 Phi errors is consistent: **inference over verificatio
 
 This is a fundamental scorer behavior difference, not a rubric sensitivity issue. Phi's false-safe problem on checklist judges is structural — it infers rather than verifies. Phi is not useful as a quality signal for handoff_completeness.
 
-One Phi parse error on hc_rt_06 (missing `confidence` field on detailed_with_examples) — consistent with prior Phi output stability issues on longer prompts.
+Three Phi parse errors on detailed_with_examples (hc_fail_01, hc_rt_02, hc_rt_06), all caused by uppercase confidence values (e.g. `"HIGH"` instead of `"high"`). This is a different failure mode from technical diagnosis, where Phi dropped fields entirely under length pressure — here the structure is present but the value format is wrong.
 
 ## What should become fine-tuning data
 
@@ -48,6 +48,6 @@ No Qwen failures to correct. Two patterns documented in `data/future_finetune/ha
 - 0% false-safe and 0% false-unsafe — perfect calibration
 - The examples anchored what each required element looks like in practice, eliminating both the vague-rubric false-unsafes and the one remaining detailed-rubric false-safe
 
-Pattern confirmed: checklist-type failure modes (Judge 2: SOP adherence, Judge 5: handoff_completeness) both peaked with detailed_with_examples. Holistic failure modes (Judge 1: source_of_truth, Judge 3: unsupported_promise) peaked with detailed. Judge 4 (technical_diagnosis, hybrid) also peaked with detailed_with_examples.
+Pattern confirmed: checklist-type failure modes (Judge 2: SOP adherence, Judge 5: handoff_completeness) both peaked with detailed_with_examples. Holistic failure modes (Judge 1: source_of_truth, Judge 3: unsupported_promise) peaked with the vague rubric. Judge 4 (technical_diagnosis, hybrid) also peaked with detailed_with_examples.
 
 Do not reopen the rubric ablation. detailed_with_examples is locked.

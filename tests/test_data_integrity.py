@@ -44,6 +44,8 @@ def test_corrected_has_required_fields():
 def test_future_finetune_verdicts_are_fail():
     for path in (DATA_DIR / "future_finetune").glob("*.jsonl"):
         for i, ex in enumerate(load_jsonl(path)):
+            if ex.get("record_type") == "pattern_note":
+                continue  # pattern notes are rubric design lessons, not training verdicts
             v = ex.get("corrected_verdict", {})
             assert v.get("pass") is False, f"{path.name} row {i}: future_finetune corrected_verdict must be pass=false"
 

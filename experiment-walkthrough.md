@@ -625,7 +625,7 @@ The pattern across all 13 Phi errors is a single behavior: **inference over veri
 
 Phi is reading the handoff charitably — the way a human might read it if they already knew the context. That's the wrong evaluator behavior. A handoff is judged on what a receiving agent with no prior context can extract from the note alone. Phi is giving credit for what a handoff implies; the judge should give credit only for what it states.
 
-This is different from the Phi failure mode on technical diagnosis, where Phi simply struggled with longer prompts and produced parse errors. Here Phi outputs parse cleanly (94% JSON validity) but applies the wrong scoring logic. The problem is the reasoning, not the output format.
+Phi produced 3 parse errors (hc_fail_01, hc_rt_02, hc_rt_06), all caused by uppercase confidence values — a different failure mode from technical diagnosis, where Phi dropped fields entirely under length pressure. Here Phi's output structure is largely intact (94% JSON validity) but the scoring logic is wrong. The dominant problem is the reasoning, not the output format.
 
 Phi is not useful as a quality signal for this judge. All 13 of its disagreements were false-safes in the same direction, meaning it provides no information that Qwen's verdicts don't already give you — and the information it adds is systematically wrong.
 
@@ -637,10 +637,10 @@ The run result is clean. The lesson from the run is about rubric design, not mod
 
 **Lesson 1: Checklist judges have two failure modes, not one.** Every discussion of judge quality focuses on false-safes — failures that slip through. But this run produced a 35% false-unsafe rate under the vague rubric — valid handoffs incorrectly flagged as failures. False-unsafe errors are equally disqualifying in production. A judge used to audit a support team will erode trust immediately if it flags responses that aren't actually failures. The rubric structure determines which failure mode you get, and explicit enumeration is the cure for both: it blocks invented requirements (which cause false-unsafes) and establishes the exact standard for presence (which prevents false-safes).
 
-**Lesson 2: Perfect scores reveal what the task structure requires.** Qwen achieving 100% on this judge doesn't mean handoff completeness is easy — it means the task structure is well-matched to what the rubric can specify and what the model can check. Source-of-truth peaked at 92%, unsupported-promise at 88%, technical diagnosis at 94%. Handoff completeness at 100% is because the six required elements are concrete and enumerable. You can name them. You can show them. The model can check them. Failure types that depend on epistemics (certainty without evidence), mechanism evaluation (does this cause produce this effect?), or causal reasoning require fundamentally harder rubric work to specify.
+**Lesson 2: Perfect scores reveal what the task structure requires.** Qwen achieving 100% on this judge doesn't mean handoff completeness is easy — it means the task structure is well-matched to what the rubric can specify and what the model can check. Source-of-truth peaked at 92%, unsupported-promise at 100% (vague rubric), technical diagnosis at 94%. Handoff completeness at 100% is because the six required elements are concrete and enumerable. You can name them. You can show them. The model can check them. Failure types that depend on epistemics (certainty without evidence), mechanism evaluation (does this cause produce this effect?), or causal reasoning require fundamentally harder rubric work to specify.
 
 **Lesson 3: The cross-judge pattern is now stable.** After five judges:
-- Holistic failure modes (source-of-truth, unsupported-promise): detailed rubric wins
+- Holistic failure modes (source-of-truth, unsupported-promise): vague rubric wins
 - Checklist failure modes (SOP adherence, handoff completeness): detailed_with_examples wins
 - Hybrid failure modes (technical diagnosis): detailed_with_examples wins
 
