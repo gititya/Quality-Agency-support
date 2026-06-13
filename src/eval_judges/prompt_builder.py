@@ -38,6 +38,25 @@ def build_prompt(judge_id: str, rubric_variant: str, example: dict) -> str:
         parts.append(f"Handoff note: {example['handoff_note']}")
 
     parts.append("")
+    parts.append(
+        "Scope discipline: judge only the quality dimension named in the rubric. "
+        "Do not credit or penalize unrelated dimensions such as handoff completeness, "
+        "process adherence, technical diagnosis, or source grounding unless that dimension "
+        "is the rubric's actual target."
+    )
+    parts.append(
+        "Span discipline: exact_failure_span must be copied from Agent response, "
+        "or from Handoff note when judging handoff_completeness. Do not copy spans from "
+        "Ticket, Conversation history, Policy context, Tool context, or Expected process. "
+        "If the failure is an omission with no exact bad phrase, use null and explain the "
+        "missing item through missing_requirement and evidence_gap."
+    )
+    parts.append(
+        "For failures caused by omitted steps, missing evidence, or incomplete handoff details, "
+        "also include optional JSON fields: "
+        '"missing_requirement" (what required item is absent) and '
+        '"evidence_gap" (what evidence is missing from the response or handoff).'
+    )
     parts.append("Return your verdict as a JSON object only. No markdown fences, no explanation outside the JSON.")
 
     return "\n".join(parts)

@@ -1,0 +1,39 @@
+{
+  "case_id": "northstar_learning_webhook_secret_rotation",
+  "title": "Webhook delivery failures after signing-secret rotation before launch",
+  "ticket": "Northstar Learning is a Growth-plan B2B SaaS customer using webhooks to sync product-qualified trial signups into its CRM. Their lifecycle operations manager reports that webhook deliveries stopped after a signing-secret rotation, and 36 trial signups from today's launch campaign have not reached the CRM. The launch review is Friday morning, and they are asking whether support can restore delivery and replay the missed events without losing signups.",
+  "conversation": "Customer: We rotated our webhook signing secret around 14:00 UTC today. Since then, new trial signups are not showing up in our CRM. We have a Friday launch review and 36 signups are missing from the campaign dashboard.\nAgent: I am checking the delivery logs now.\nCustomer: Please do not rotate the secret again unless we approve it. We tried the manual retry button twice and it still failed. If this needs integrations, please include the event IDs so we do not have to repeat this.",
+  "policy_context": "Webhook support policy: support may inspect delivery metadata for a requester who is a verified workspace admin, but must not expose payload bodies or signing-secret values in the ticket. For 401 signature_mismatch after a signing-secret rotation, support should explain that the receiving endpoint is likely validating against the previous secret, ask the customer to confirm the receiver has been updated to the active secret, and then recommend replaying one recent event as a test. Failed webhook events are available for self-serve replay for 72 hours. Events older than 72 hours require integrations review, and support must not guarantee a full backfill. Integrations escalations should include workspace_id, endpoint_id, at least three event_ids, onset time, last known successful delivery, current HTTP status, retry state, customer business impact, and a clear next step.",
+  "tool_context": "Requester lookup: Maya Chen, lifecycle operations manager, verified workspace admin in CRM. Workspace lookup: workspace_id=ws_northstar_337, plan=Growth, endpoint_id=wh_crm_882, destination=CRM lead-intake webhook. Delivery logs: last_success=2026-06-12T13:58:44Z, first_failure=2026-06-12T14:05:12Z, sampled_event_ids=evt_9a21, evt_9a22, evt_9a23, current_status=401, error=signature_mismatch, retry_state=automatic retries exhausted for sampled events. Secret audit: signing secret rotated at 2026-06-12T14:01:03Z by Maya Chen. Incident status: no active webhook delivery incident. Replay window: all sampled failures are within 72 hours and are eligible for self-serve replay after the receiver is corrected.",
+  "expected_process": [
+    "Acknowledge the launch-review urgency and the missing signup impact",
+    "Use CRM verification or state that the requester is a verified workspace admin before discussing delivery logs",
+    "Check delivery logs for workspace_id, endpoint_id, event_ids, onset time, last success, HTTP status, and retry state",
+    "Explain that 401 signature_mismatch after the rotation points to the receiver validating against the previous secret",
+    "Ask the customer to confirm the CRM receiver has been updated to the active signing secret before instructing them to replay events",
+    "Respect the customer's request not to rotate the secret again without approval",
+    "Avoid promising a full backfill or guaranteed recovery before integrations review",
+    "Create a handoff that includes customer identity, workspace_id, endpoint_id, event_ids, onset, last success, retry state, business impact, and the next action for integrations"
+  ],
+  "agent_response": "Thanks, I checked the delivery logs for workspace ws_northstar_337 and endpoint wh_crm_882. There is no active platform incident. The failures start at 2026-06-12 14:05 UTC, right after the signing-secret rotation, and the sampled events are returning 401 signature_mismatch. That usually means the CRM receiver is still validating against the previous secret, not that our queue is down. Please update the CRM receiver to the active signing secret in Settings, then replay evt_9a21 as a test. Events from the last 72 hours remain eligible for self-serve replay; anything older will need integrations review. I am escalating the event IDs and delivery log findings so integrations can confirm replay eligibility and retry state. I cannot promise a full backfill until they review the failed-event window.",
+  "handoff_note": "Northstar webhooks failing after secret rotation. Logs show 401 signature_mismatch. Please check replay eligibility.",
+  "metadata": {
+    "customer": "Northstar Learning",
+    "segment": "Growth B2B SaaS",
+    "designed_to_exercise": [
+      "source_of_truth",
+      "sop_adherence",
+      "unsupported_promise",
+      "technical_diagnosis",
+      "handoff_completeness"
+    ],
+    "intended_pass_fail_profile": {
+      "source_of_truth": "pass",
+      "sop_adherence": "fail",
+      "unsupported_promise": "pass",
+      "technical_diagnosis": "pass",
+      "handoff_completeness": "fail"
+    },
+    "case_design_notes": "The agent uses the provided delivery logs and avoids promising a backfill, so source-of-truth, unsupported-promise, and technical-diagnosis judges should have reasons to pass. The response skips visible admin-verification language, does not ask the customer to confirm the receiver update before replay, and omits the launch-impact details. The handoff is intentionally too thin despite rich context being available, giving handoff completeness a concrete omission-evidence target."
+  }
+}

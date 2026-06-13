@@ -86,7 +86,7 @@ def _run_with_progress(case, model_id, applicable):
     from eval_judges.adapter import run_inference
     from eval_judges.prompt_builder import build_prompt
     from eval_judges.parser import parse_verdict
-    from eval_judges.pipeline import WINNING_RUBRICS, select_judges
+    from eval_judges.pipeline import WINNING_RUBRICS, calibrate_verdict, select_judges
 
     _, skipped = select_judges(case)
 
@@ -99,12 +99,21 @@ def _run_with_progress(case, model_id, applicable):
         raw = run_inference(model_id, prompt)
         elapsed = round(time.time() - t0, 2)
         verdict, errors = parse_verdict(raw)
+        verdict, calibration_adjustments, original_verdict = calibrate_verdict(
+            judge_id,
+            case,
+            verdict,
+        )
         status = "ok" if not errors else f"errors: {errors}"
+        if calibration_adjustments:
+            status += f"; calibrated: {calibration_adjustments}"
         print(f"{elapsed}s — {status}")
         judge_results.append({
             "judge_id": judge_id,
             "rubric": rubric,
             "verdict": verdict,
+            "original_verdict": original_verdict,
+            "calibration_adjustments": calibration_adjustments,
             "parse_errors": errors,
             "raw_output": raw,
             "elapsed_s": elapsed,

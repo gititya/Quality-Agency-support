@@ -1,0 +1,22 @@
+{
+  "run_id": "20260612_190110",
+  "case_id": "acme_analytics_enterprise_export_billing",
+  "model": "mlx-community/Qwen3-4B-4bit",
+  "judges_run": [
+    "source_of_truth",
+    "sop_adherence",
+    "unsupported_promise",
+    "technical_diagnosis",
+    "handoff_completeness"
+  ],
+  "judges_skipped": [],
+  "applicability_map": {
+    "source_of_truth": true,
+    "sop_adherence": true,
+    "unsupported_promise": true,
+    "technical_diagnosis": true,
+    "handoff_completeness": true
+  },
+  "total_elapsed_s": 129.43,
+  "timestamp": "20260612_190110"
+}

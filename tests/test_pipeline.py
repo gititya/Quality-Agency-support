@@ -10,6 +10,7 @@ from eval_judges.pipeline import (
     select_judges,
     run_pipeline,
     save_pipeline_artifacts,
+    calibrate_verdict,
     ALL_JUDGES,
     WINNING_RUBRICS,
 )
@@ -48,6 +49,8 @@ STUB_FAIL_VERDICT = json.dumps({
     "score": 0.2,
     "failure_type": "unsupported_promise",
     "exact_failure_span": "Your card might be expired",
+    "missing_requirement": "Confirm the payment failure reason before diagnosing.",
+    "evidence_gap": "No billing lookup, processor error, or card decline code is cited.",
     "rationale": "Agent stated a cause without diagnostic evidence.",
     "safer_requirement": "Ask for more information before diagnosing.",
     "confidence": "medium",
@@ -164,6 +167,54 @@ def test_run_pipeline_handles_parse_failure():
         assert jr["parse_errors"] != []
 
 
+def test_calibration_overrides_negated_promise_false_positive():
+    verdict = {
+        "pass": False,
+        "score": 0.3,
+        "failure_type": "unsupported_promise",
+        "exact_failure_span": "I cannot promise a full backfill until they review the failed-event window.",
+        "rationale": "The agent made an unsupported promise.",
+        "safer_requirement": "Avoid promising a full backfill.",
+        "confidence": "medium",
+    }
+
+    calibrated, adjustments, original = calibrate_verdict(
+        "unsupported_promise",
+        FULL_CASE,
+        verdict,
+    )
+
+    assert calibrated["pass"] is True
+    assert calibrated["failure_type"] is None
+    assert calibrated["exact_failure_span"] is None
+    assert adjustments == ["unsupported_promise_false_positive_negated_commitment"]
+    assert original == verdict
+
+
+def test_calibration_removes_failure_span_from_context():
+    verdict = {
+        "pass": False,
+        "score": 0.7,
+        "failure_type": "skipped_step",
+        "exact_failure_span": "Customer: my keys stopped working. Agent: have you changed your password?",
+        "rationale": "The agent skipped a step.",
+        "safer_requirement": "Complete the required workflow.",
+        "confidence": "medium",
+    }
+
+    calibrated, adjustments, original = calibrate_verdict(
+        "sop_adherence",
+        FULL_CASE,
+        verdict,
+    )
+
+    assert calibrated["pass"] is False
+    assert calibrated["exact_failure_span"] is None
+    assert calibrated["evidence_gap"]
+    assert adjustments == ["invalid_failure_span_removed"]
+    assert original == verdict
+
+
 def test_save_pipeline_artifacts_writes_all_files():
     """save_pipeline_artifacts creates case.json, verdicts.jsonl, run_summary.json, report.md."""
     result = run_pipeline(FULL_CASE, "fake-model", inference_fn=fake_inference)
@@ -256,6 +307,8 @@ def test_report_md_flags_failures():
         report = (run_dir / "report.md").read_text()
 
     assert "## Failures and Flags" in report
+    assert "Missing: `Confirm the payment failure reason before diagnosing.`" in report
+    assert "Evidence gap: `No billing lookup, processor error, or card decline code is cited.`" in report
 
 
 if __name__ == "__main__":
@@ -271,6 +324,8 @@ if __name__ == "__main__":
         test_run_pipeline_calls_correct_judges,
         test_run_pipeline_records_verdicts,
         test_run_pipeline_handles_parse_failure,
+        test_calibration_overrides_negated_promise_false_positive,
+        test_calibration_removes_failure_span_from_context,
         test_save_pipeline_artifacts_writes_all_files,
         test_save_pipeline_artifacts_case_json_roundtrip,
         test_save_pipeline_artifacts_verdicts_jsonl,

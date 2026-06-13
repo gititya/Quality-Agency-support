@@ -1,6 +1,8 @@
 """E2E support quality pipeline over the five completed judges."""
 import json
+import re
 import time
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,16 @@ WINNING_RUBRICS = {
 }
 
 ALL_JUDGES = list(WINNING_RUBRICS.keys())
+
+NEGATED_PROMISE_RE = re.compile(
+    r"\b(?:cannot|can't|can not|do not|don't)\s+"
+    r"(?:promise|guarantee|confirm|commit)\b",
+    re.IGNORECASE,
+)
+POSITIVE_COMMITMENT_RE = re.compile(
+    r"\b(?:will|guarantee|promise|committed|confirmed)\b",
+    re.IGNORECASE,
+)
 
 # A judge is applicable only when its required context fields are present.
 # unsupported_promise and technical_diagnosis apply to every case.
@@ -73,10 +85,17 @@ def run_pipeline(case: dict, model_id: str, inference_fn=None) -> dict[str, Any]
         raw = inference_fn(model_id, prompt)
         elapsed = round(time.time() - t0, 2)
         verdict, errors = parse_verdict(raw)
+        verdict, calibration_adjustments, original_verdict = calibrate_verdict(
+            judge_id,
+            case,
+            verdict,
+        )
         judge_results.append({
             "judge_id": judge_id,
             "rubric": rubric,
             "verdict": verdict,
+            "original_verdict": original_verdict,
+            "calibration_adjustments": calibration_adjustments,
             "parse_errors": errors,
             "raw_output": raw,
             "elapsed_s": elapsed,
@@ -107,6 +126,8 @@ def save_pipeline_artifacts(
                 "judge_id": r["judge_id"],
                 "rubric": r["rubric"],
                 "verdict": r["verdict"],
+                "original_verdict": r.get("original_verdict"),
+                "calibration_adjustments": r.get("calibration_adjustments", []),
                 "parse_errors": r["parse_errors"],
                 "elapsed_s": r["elapsed_s"],
             }) + "\n")
@@ -168,10 +189,24 @@ def _render_report(case: dict, result: dict, summary: dict) -> str:
         if len(span) > 60:
             span = span[:57] + "..."
         lines.append(f"| {r['judge_id']} | {verdict_str} | {failure_type} | {confidence} | {span} |")
+        adjustments = r.get("calibration_adjustments") or []
         if not v.get("pass"):
+            evidence_gap = v.get("evidence_gap")
+            missing_requirement = v.get("missing_requirement")
+            extra = ""
+            if missing_requirement:
+                extra += f" | Missing: `{missing_requirement}`"
+            if evidence_gap:
+                extra += f" | Evidence gap: `{evidence_gap}`"
             flags.append(
                 f"- **{r['judge_id']}** ({v.get('confidence', '?')} confidence): "
-                f"{v.get('rationale', '')} | Span: `{v.get('exact_failure_span', 'n/a')}`"
+                f"{v.get('rationale', '')} | Span: `{v.get('exact_failure_span') or 'n/a'}`"
+                f"{extra}"
+            )
+        elif adjustments:
+            flags.append(
+                f"- **{r['judge_id']}** calibration adjustment: "
+                f"{'; '.join(adjustments)}"
             )
 
     lines.append("")
@@ -184,3 +219,76 @@ def _render_report(case: dict, result: dict, summary: dict) -> str:
 
     lines.append(f"*Total inference time: {summary['total_elapsed_s']}s*")
     return "\n".join(lines) + "\n"
+
+
+def calibrate_verdict(
+    judge_id: str,
+    case: dict,
+    verdict: dict | None,
+) -> tuple[dict | None, list[str], dict | None]:
+    """Apply deterministic guardrails for known judge-output failure modes."""
+    if verdict is None:
+        return None, [], None
+
+    calibrated = deepcopy(verdict)
+    original_verdict = None
+    adjustments = []
+
+    if _is_negated_promise_false_positive(judge_id, calibrated):
+        original_verdict = original_verdict or deepcopy(verdict)
+        calibrated["pass"] = True
+        calibrated["score"] = max(float(calibrated.get("score", 0.0)), 0.9)
+        calibrated["failure_type"] = None
+        calibrated["exact_failure_span"] = None
+        calibrated["rationale"] = (
+            "Calibration override: the original unsupported-promise verdict flagged "
+            "a refusal to promise or guarantee an outcome, which is safe expectation-setting."
+        )
+        calibrated["safer_requirement"] = "No unsupported-promise correction required."
+        calibrated["confidence"] = "medium"
+        calibrated.pop("missing_requirement", None)
+        calibrated.pop("evidence_gap", None)
+        adjustments.append(
+            "unsupported_promise_false_positive_negated_commitment"
+        )
+
+    span_adjustment = _calibrate_span(judge_id, case, calibrated)
+    if span_adjustment:
+        original_verdict = original_verdict or deepcopy(verdict)
+        adjustments.append(span_adjustment)
+
+    return calibrated, adjustments, original_verdict
+
+
+def _calibrate_span(judge_id: str, case: dict, verdict: dict) -> str | None:
+    span = verdict.get("exact_failure_span")
+    if not span:
+        return None
+
+    allowed_texts = [case.get("agent_response", "")]
+    if judge_id == "handoff_completeness":
+        allowed_texts.append(case.get("handoff_note", ""))
+
+    if any(span in text for text in allowed_texts if text):
+        return None
+
+    verdict["exact_failure_span"] = None
+    verdict.setdefault(
+        "evidence_gap",
+        "The judge supplied a failure span from context rather than the evaluated response or handoff.",
+    )
+    return "invalid_failure_span_removed"
+
+
+def _is_negated_promise_false_positive(judge_id: str, verdict: dict) -> bool:
+    if judge_id != "unsupported_promise":
+        return False
+    if verdict.get("pass") is not False:
+        return False
+
+    span = verdict.get("exact_failure_span") or ""
+    if not NEGATED_PROMISE_RE.search(span):
+        return False
+
+    remainder = NEGATED_PROMISE_RE.sub("", span)
+    return not POSITIVE_COMMITMENT_RE.search(remainder)

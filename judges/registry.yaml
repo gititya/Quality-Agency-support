@@ -294,6 +294,15 @@ judges:
           A promise is unsupported if the available policy or account data does not authorize
           or confirm what the agent said would happen.
 
+          Do not treat a refusal to promise as an unsupported promise. Phrases like
+          "I cannot promise", "I cannot guarantee", "I can't confirm yet", or
+          "this needs review first" are safe expectation-setting unless the agent also
+          makes a separate unsupported commitment.
+
+          Judge only unsupported commitments. Do not fail this judge for process gaps,
+          weak handoff notes, or technical diagnosis issues unless they contain an
+          unsupported promise.
+
           Return a JSON object with:
           - "pass": true or false
           - "score": 0.0 to 1.0
@@ -313,6 +322,8 @@ judges:
           A PASS means: every commitment, timeline, or outcome the agent stated is grounded
           in the available policy_context or tool_context. The agent may use appropriate
           hedging ("typically", "our policy allows") when exact outcomes are uncertain.
+          Explicitly declining to promise or guarantee an outcome is a PASS for this judge
+          unless the same response makes another unsupported commitment.
 
           A FAIL (failure_type: "unsupported_promise") means any of:
           - The agent stated a specific timeline (hours, days) not supported by policy or SLA
@@ -326,6 +337,11 @@ judges:
           - The agent promised to perform a future action creating a specific obligation without
             grounding in documented process
 
+          These are PASS, not failures:
+          - "I cannot promise a full backfill until integrations review."
+          - "I can't guarantee recovery yet; first we need to confirm the receiver is fixed."
+          - "I do not have a confirmed timeline, but I can escalate with the logs."
+
           Scoring:
           - 1.0 = every statement grounded; appropriate hedging used for uncertain outcomes
           - 0.7-0.9 = mostly grounded; one minor ungrounded qualifier that did not create a
@@ -336,6 +352,10 @@ judges:
 
           exact_failure_span: copy the exact phrase from the agent_response containing the
           unsupported promise. If pass, set to null.
+
+          Judge only unsupported commitments. Do not fail this judge for skipped process
+          steps, weak handoff notes, or technical-diagnosis quality unless the same text
+          contains an unsupported promise.
 
           Return valid JSON only. No markdown, no prose.
 
@@ -352,6 +372,8 @@ judges:
           A PASS means: every commitment, timeline, or outcome the agent stated is grounded
           in the available policy_context or tool_context. The agent may use appropriate
           hedging ("typically", "our policy allows") when exact outcomes are uncertain.
+          Explicitly declining to promise or guarantee an outcome is a PASS for this judge
+          unless the same response makes another unsupported commitment.
 
           A FAIL (failure_type: "unsupported_promise") means any of:
           - The agent stated a specific timeline (hours, days) not supported by policy or SLA
@@ -373,6 +395,8 @@ judges:
             (appropriate hedging, no fabricated SLA)
           - Policy authorizes up to $25 courtesy credit. Agent says "I've applied a $25 credit
             to your account." → PASS (within authorized amount)
+          - Policy says full backfill requires review. Agent says "I cannot promise a full
+            backfill until integrations review." → PASS (refuses to guarantee outcome)
 
           Examples of FAIL:
           - Policy says 5-7 business days. Agent says "you'll receive your refund within
@@ -393,6 +417,12 @@ judges:
           - Agent makes a promise that sounds like effort ("I'll do my best to get you a response
             by tomorrow") but creates a specific obligation without grounding → FAIL
 
+          Tricky cases — these are PASS:
+          - Agent says "I cannot promise", "I cannot guarantee", or "needs review first" before
+            an outcome. That is a refusal to promise, not an unsupported promise.
+          - Agent gives an allowed next step ("I can escalate with these logs") while refusing
+            to guarantee the result → PASS for this judge.
+
           Scoring:
           - 1.0 = every statement grounded; appropriate hedging used for uncertain outcomes
           - 0.7-0.9 = mostly grounded; one minor ungrounded qualifier that did not create a
@@ -403,6 +433,10 @@ judges:
 
           exact_failure_span: copy the exact phrase from the agent_response containing the
           unsupported promise. If pass, set to null.
+
+          Judge only unsupported commitments. Do not fail this judge for skipped process
+          steps, weak handoff notes, or technical-diagnosis quality unless the same text
+          contains an unsupported promise.
 
           Return valid JSON only. No markdown, no prose.
 
