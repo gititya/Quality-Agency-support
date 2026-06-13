@@ -660,7 +660,7 @@ The vague-rubric false-unsafe pattern (35% rate) is the other documented finding
 
 ## What comes next
 
-The original next judge would have been **escalation timing** — did the support agent escalate at the right moment, or did they wait too long? That remains a plausible future extension, but it is no longer part of this completed scope. The project now stops at five judges and moves to the E2E pipeline plus one fine-tuning comparison.
+The original next judge would have been **escalation timing** — did the support agent escalate at the right moment, or did they wait too long? That remains a plausible future extension, but it is no longer part of this completed scope. The project now stops at five judges, the E2E pipeline, the final support QA reports, and the calibration-based fine-tuning decision.
 
 ---
 
@@ -702,18 +702,58 @@ Qwen3-4B is the only viable primary local judge from these runs. It produced use
 
 Phi-4-mini is not a useful standalone judge here. Its recurring failure mode is charitable passing: it infers missing evidence, treats plausible explanations as sufficient, and lets bad responses through. Its value is limited to disagreement analysis: when Phi flags something Qwen passed, inspect it; Phi PASS verdicts carry little weight.
 
-## What should happen next
+## What was completed after the five judges
 
-Do not build the remaining ten judges. The next useful work is to turn the five completed judges into a proof-of-work pipeline:
+The five judges were turned into one support QA flow:
 
-1. Build an E2E support quality pipeline that runs the five completed judges on one support case.
-2. Run all applicable judges on one realistic support case.
-3. Synthesize the verdicts into one QA report: what went well, what failed, what is risky, what needs human review, and the overall quality grade.
-4. Run one focused Qwen LoRA experiment on the recurring false-safe patterns from the five judges.
-5. Compare base Qwen vs LoRA Qwen on the same five-judge E2E case set.
+1. Run the completed judges on the same support case.
+2. Preserve each judge's verdict, rationale, confidence, exact span, and missing requirement.
+3. Apply deterministic calibration guardrails only for known judge-output mistakes.
+4. Synthesize the verdicts into one support QA report.
+5. Run a 40-example calibration eval to decide whether fine-tuning is justified.
 
-The fine-tuning target should be narrow:
+The final support QA agency now works like a team of specialist QA reviewers:
 
-> Do not pass a response just because part of it is grounded. Evaluate each claim, step, and handoff element independently, and require explicit evidence.
+- **Policy reviewer:** did the agent use the policy, account data, tool output, or logs?
+- **Process reviewer:** did the agent follow the required support workflow?
+- **Promise reviewer:** did the agent overpromise a fix, refund, credit, backfill, or timeline?
+- **Technical reviewer:** did the technical diagnosis actually make sense?
+- **Handoff reviewer:** could the next agent continue without making the customer repeat everything?
 
-This target absorbs the recurring misses across the five runs: avoidance without contradiction, rationale hallucination, self-assertion as evidence, grounded anchor plus unsupported addition, technically credible false certainty, and inference over verification.
+The final E2E report turns those specialist checks into a customer-support QA summary: what the agent did well, what failed, what needs human review, and what should be fixed first.
+
+## Fine-tuning decision
+
+Fine-tuning was tested as a decision, not assumed as a requirement.
+
+The calibration eval created 40 examples across five practical support QA patterns:
+
+- negated promises that should pass, such as "I cannot promise a full backfill"
+- real unsupported promises that should fail
+- invalid failure spans copied from conversation or checklist text
+- judge-scope drift, where one judge grades another judge's job
+- clean pass controls so the judge does not become too harsh
+
+Qwen was then run on that calibration set.
+
+| Result | Value |
+|---|---:|
+| Raw Qwen accuracy | 92.5% |
+| Calibrated Qwen accuracy | 95% |
+| Calibrated miss rate | 5% |
+| JSON validity | 95% |
+| Repeated post-guardrail pattern above threshold | None |
+
+The decision rule was simple: fine-tune only if Qwen still missed 20% or more of the calibration set, or if one mistake pattern repeated three or more times after prompt and guardrail fixes.
+
+That threshold was not met.
+
+**Final decision:** do not fine-tune for this completed repo. Prompt plus calibration is enough.
+
+## What this means in support terms
+
+Right now, the system is like a calibrated QA checklist run by specialist reviewers. It catches policy misuse, skipped process steps, risky promises, weak technical reasoning, and bad handoffs. When a known judge mistake appears, such as misreading "I cannot promise" as an actual promise, the system records the original model verdict, applies a visible calibration adjustment, and keeps the report honest.
+
+After fine-tuning, the goal would be different: the local model would ideally learn these QA boundaries internally. It would need fewer guardrails because it would naturally know that a refusal to promise is safe, that missing steps need omission evidence, and that a technical judge should not grade handoff quality.
+
+But that is not necessary for the final build. The calibration eval showed the current system already performs well enough for the proof-of-work. Fine-tuning would be a depth exercise: useful for learning how to train a local judge, but not required to make this support QA agency complete.

@@ -2,7 +2,7 @@
 
 ## Summary
 
-`gititya/Quality-Agency-support` is now scoped as a completed five-judge customer-support QA experiment, not the original 15-judge buildout. The system evaluates support responses, not generates them. The remaining work is to close the repo with an end-to-end pipeline over the five completed judges, one synthesis report, and one focused Qwen LoRA fine-tuning experiment.
+`gititya/Quality-Agency-support` is a completed five-judge customer-support QA experiment, not the original 15-judge buildout. The system evaluates support responses, not generates them. The final build includes the five completed judges, an end-to-end support QA pipeline, calibrated QA reports, a 40-example calibration eval set, and a metrics-based decision that fine-tuning is not needed for this completed repo.
 
 Use two MLX models only:
 
@@ -114,14 +114,14 @@ All five approved baseline runs are merged into `main`.
 
 ## Learning Additions
 
-Include these in v1, not later:
+Included in the final build:
 
-- **Rubric ablation**: prove whether better rubrics beat fine-tuning.
+- **Rubric ablation**: prove when better rubrics beat model changes.
 - **False-safe red-team set**: prioritize catching subtle bad answers that sound polished.
 - **Judge disagreement report**: compare Qwen vs Phi vs gold label.
 - **Process graph judge**: for SOP/process adherence, score which required workflow step was skipped.
 
-The five completed judges produced enough corrected and future-finetune examples to support one focused LoRA experiment. The remaining fine-tuning target is cross-judge false-safe behavior, not a sixth judge.
+The five completed judges produced enough corrected and future-finetune examples to test whether a focused LoRA would be justified. The calibration eval showed it is not justified for the completed repo: calibrated Qwen reached 95% accuracy on the 40-row calibration set, with no repeated post-guardrail failure pattern crossing the fine-tuning threshold.
 
 ## End-to-End Support Quality Pipeline
 
@@ -144,11 +144,11 @@ The synthesis model must not override judge evidence silently. If it disagrees w
 
 The E2E report is the final proof-of-work artifact: the interpretable judge outputs plus one readable QA synthesis.
 
-## Final Fine-Tuning Experiment
+## Final Fine-Tuning Decision
 
-After the E2E pipeline and report exist, run one focused Qwen LoRA experiment.
+Fine-tuning was evaluated as a decision, not treated as mandatory work.
 
-Fine-tuning target:
+The proposed fine-tuning target was:
 
 - Teach Qwen to reduce recurring false-safes across the five judges.
 - Do not train a broad generic support judge.
@@ -158,7 +158,7 @@ Primary training theme:
 
 > Do not pass a response just because part of it is grounded. Evaluate each claim, step, and handoff element independently, and require explicit evidence.
 
-Use corrected and future-finetune records from the five completed judges, especially:
+The calibration set used corrected and future-finetune patterns from the five completed judges, especially:
 
 - source-of-truth: avoidance without contradiction, rationale hallucination
 - SOP adherence: self-assertion accepted as step evidence
@@ -166,20 +166,35 @@ Use corrected and future-finetune records from the five completed judges, especi
 - technical diagnosis: technically credible false certainty
 - handoff completeness: inference over verification as a contrast/pattern note
 
-Evaluation:
+Decision evaluation:
 
-- Rerun the five-judge E2E pipeline with base Qwen and LoRA Qwen.
-- Compare false-safe rate, false-unsafe rate, span quality, JSON validity, and synthesis quality.
-- The LoRA is successful only if it reduces false-safes without creating a meaningful false-unsafe increase.
+- Build a 40-example calibration set covering negated promises, real unsupported promises, invalid spans, judge-scope drift, and clean pass controls.
+- Run base Qwen through the current prompt and calibration stack.
+- Compare raw Qwen and calibrated Qwen on accuracy, false-safe rate, false-unsafe rate, span correctness, JSON validity, and recurring failure patterns.
+- Fine-tune only if raw or calibrated Qwen still misses 20% or more of the calibration set, or if one pattern repeats 3+ times after guardrails.
 
-## Remaining Completion Sequence
+Final result from `reports/pipeline_calibration/20260613_193948/fine_tune_decision.md`:
 
-1. Update the repo docs to reflect five completed judges and the new close-out scope.
-2. Build the E2E support quality pipeline over the five completed judges.
-3. Run the five applicable judges on one support case.
-4. Synthesize the verdicts into one support QA report.
-5. Run one focused Qwen LoRA fine-tuning experiment and compare base vs fine-tuned Qwen.
-6. Add a final completion note and mark the repo complete.
+- Raw Qwen accuracy: 92.5%.
+- Calibrated Qwen accuracy: 95%.
+- Calibrated miss rate: 5%.
+- No repeated pattern crossed the 3+ threshold after guardrails.
+- Recommendation: do not fine-tune yet.
+
+In customer-support terms: the existing reviewers are already good enough for the final proof-of-work. Fine-tuning would be an extra learning exercise, not a necessary step to make this repo complete.
+
+## Final Completion Sequence
+
+Completed sequence:
+
+1. Repo docs reflect five completed judges and the close-out scope.
+2. E2E support quality pipeline runs the five completed judges.
+3. Two realistic support cases are saved and run through the pipeline.
+4. Pipeline verdicts synthesize into readable support QA reports.
+5. Calibration eval tested whether fine-tuning is justified.
+6. Fine-tuning decision recorded: prompt plus calibration is enough for the final build.
+
+The repo is complete after the final README update is added later. Do not build more judges or run LoRA fine-tuning unless the project is explicitly reopened as a separate learning exercise.
 
 ## Test Plan
 
@@ -191,13 +206,13 @@ Evaluation:
 - Report test confirming every approved run produces reproducible artifacts before commit.
 - Wind-up test confirming primary-model failures are bucketed and corrected examples are written before the judge is marked complete.
 - E2E pipeline test confirming one support case can run through the five completed judges and produce a synthesis report.
-- Fine-tuning comparison test/report confirming base Qwen and LoRA Qwen are compared on the same five-judge suite.
+- Calibration decision test/report confirming base Qwen is evaluated before any LoRA work is attempted.
 
 ## Assumptions
 
 - Repo target is `https://github.com/gititya/Quality-Agency-support`.
 - Adi approves each model run before it is committed.
 - The project remains domain-neutral for B2C and B2B SaaS support.
-- Healthcare, diabetes, and personal finance domains are excluded from v1.
-- No large model sprawl: only Qwen primary and Phi challenger for v1.
-- The repo is considered complete after the five-judge E2E pipeline, one synthesis report, and one focused Qwen LoRA comparison are committed.
+- Healthcare, diabetes, and personal finance domains are excluded from the final build.
+- No large model sprawl: only Qwen primary and Phi challenger were used for the final build.
+- The repo is considered complete after the five-judge E2E pipeline, synthesis reports, calibration eval, and final README update are committed.
