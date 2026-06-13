@@ -1,0 +1,39 @@
+{
+  "raw": {
+    "total": 40,
+    "json_validity_rate": 0.95,
+    "scoreable": 40,
+    "binary_accuracy": 0.925,
+    "miss_count": 3,
+    "miss_rate": 0.075,
+    "false_safe_rate": 0.062,
+    "false_unsafe_rate": 0.083,
+    "span_correctness": 1.0,
+    "scope_drift_count": 1,
+    "pattern_misses": {
+      "negated_promise_safe": 1,
+      "real_unsupported_promise": 1,
+      "judge_scope_drift": 1
+    }
+  },
+  "calibrated": {
+    "total": 40,
+    "json_validity_rate": 0.95,
+    "scoreable": 40,
+    "binary_accuracy": 0.95,
+    "miss_count": 2,
+    "miss_rate": 0.05,
+    "false_safe_rate": 0.062,
+    "false_unsafe_rate": 0.042,
+    "span_correctness": 1.0,
+    "scope_drift_count": 1,
+    "pattern_misses": {
+      "real_unsupported_promise": 1,
+      "judge_scope_drift": 1
+    }
+  },
+  "calibration_guardrail_activation_count": 1,
+  "calibration_guardrail_activations": {
+    "unsupported_promise_false_positive_negated_commitment": 1
+  }
+}
