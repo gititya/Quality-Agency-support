@@ -135,3 +135,19 @@ Do not treat a judge as complete until this pass is done. Before moving to the n
 ## File integrity
 
 CLAUDE.md and SKILL.md are append-only. No wholesale rewrites.
+
+## Final status - 2026-06-14
+
+The repo is complete as a five-judge customer-support QA experiment. The final build stops at:
+
+1. Source-of-truth judge
+2. SOP/process adherence judge
+3. Unsupported promise judge
+4. Technical diagnosis judge
+5. Handoff completeness judge
+
+The end-to-end pipeline runs those judges on a support case, preserves each verdict, applies visible calibration guardrails for known judge-output mistakes, and synthesizes one support QA report.
+
+Fine-tuning was evaluated with a 40-example calibration set and was not needed for this completed build. The repo keeps fine-tuning as an optional future depth exercise only.
+
+README.md is the public summary. PLAN.md and experiment-walkthrough.md hold the detailed plan and narrative record.

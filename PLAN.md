@@ -194,7 +194,7 @@ Completed sequence:
 5. Calibration eval tested whether fine-tuning is justified.
 6. Fine-tuning decision recorded: prompt plus calibration is enough for the final build.
 
-The repo is complete after the final README update is added later. Do not build more judges or run LoRA fine-tuning unless the project is explicitly reopened as a separate learning exercise.
+The repo is complete after the final README update. Do not build more judges or run LoRA fine-tuning unless the project is explicitly reopened as a separate learning exercise.
 
 ## Test Plan
 
