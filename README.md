@@ -49,6 +49,22 @@ The important part is that the report does not hide the evidence. It shows which
 5. Measured accuracy, false-safe rate, false-unsafe rate, JSON validity, span quality, and disagreement.
 6. Wrote corrected records for the model mistakes.
 
+## The rubric finding
+
+The rubric ablation was the most important experiment, and the result was the opposite of the obvious guess: **the vague rubric won, and adding more detail made the small model worse.**
+
+For the source-of-truth judge on Qwen3-4B:
+
+| Rubric | Accuracy | Missed bad answers (false-safe) | Pinpointed the exact problem (span) |
+|---|---:|---:|---:|
+| **Vague** | **92%** | **13%** | **87%** |
+| Detailed | 72% | 47% | 53% |
+| Detailed + examples | 68% | 53% | 47% |
+
+At 4B parameters the model is small enough that a detailed checklist invites rationalisation: it finds one rule that looks satisfied ("the agent mentioned the policy") and uses it to justify a pass, even when the answer contradicted the policy. More rules meant more escape routes. The vague rubric forced a holistic judgement instead of box-ticking.
+
+The practical implication: when better rubrics do not beat the vague one, the next lever is fine-tuning, not more prompt engineering — which is exactly what the calibration eval below tested.
+
 Then I built the end-to-end support QA pipeline:
 
 ```text
