@@ -21,7 +21,13 @@ This repo breaks support QA into five specialist reviewers:
 4. **Technical diagnosis** - did the technical explanation actually make sense?
 5. **Handoff completeness** - could the next agent continue without making the customer repeat everything?
 
-Each judge gives a structured verdict with pass/fail, confidence, rationale, exact failure span, and a safer requirement.
+Each judge gives a structured verdict: pass or fail, how confident it is, its reasoning, the exact piece of text that caused the failure, and what a safer reply would have looked like.
+
+## What the judge actually reads
+
+Each judge is a small AI model with one job, which is to read a single support reply and decide whether it holds up. It gets the same three things every time: the customer's question, the reply the agent sent back, and the source material the agent was supposed to rely on, which is usually a policy document or the customer's account data. The judge never sees anything the agent didn't have, so all it is really doing is checking the reply against the facts that were available when it was written.
+
+Here is a real example from the test set. A customer asks, "What is your refund policy for annual subscriptions?", and the policy on file says a full refund is available within 30 days, prorated after that. The agent writes back that the refund window is 60 days, and adds that anything later is handled case by case. Both of those are wrong: the agent doubled the real window and invented a fallback that the policy never mentions. The reply reads well, it is polite and sounds like something a real support rep would say, but it does not match the source, and catching exactly that kind of gap is the whole point. This is the example I keep coming back to throughout the rest of this README.
 
 ## What was built
 
@@ -46,7 +52,7 @@ The important part is that the report does not hide the evidence. It shows which
 2. Built red-team examples that sound polished but should fail (like trick questions) 
 3. Tested three rubric styles: vague, detailed, detailed with examples.
 4. Ran Qwen and Phi.
-5. Measured accuracy, false-safe rate, false-unsafe rate, JSON validity, span quality, and disagreement.
+5. Measured how often it was right, how often it waved a bad answer through (the false-safe rate), how often it failed a good answer, whether its output came back in the format I asked for, whether it pointed at the exact text that was wrong, and how often it disagreed with the second model.
 6. Wrote corrected records for the model mistakes.
 
 A judge was not done when its run finished. For every verdict the model got wrong I classified the miss, wrote a corrected record with the real verdict and the exact failure span, and filed it into the gold set or a future fine-tuning set. Each judge also got a short wind-up note: what it catches, what it misses, and whether the challenger was worth running. Skip that pass and you are left with metrics and no learning.
@@ -55,7 +61,7 @@ A judge was not done when its run finished. For every verdict the model got wron
 
 The rubric ablation (the process of trying out the decision with and without the rubrics I choose above) was the most important experiment, and it went the opposite way to what I expected. **The vague rubric won, and adding more detail made the small model worse.**
 
-For the source-of-truth judge on Qwen3-4B:
+For the source-of-truth judge on Qwen:
 
 | Rubric | Accuracy | Missed bad answers  | Pinpointed the exact problem  |
 |---|---:|---:|---:|
@@ -63,17 +69,15 @@ For the source-of-truth judge on Qwen3-4B:
 | Detailed | 72% | 47% | 53% |
 | Detailed + examples | 68% | 53% | 47% |
 
-At 4B parameters a long checklist backfires. The model finds one rule that looks satisfied ("the agent mentioned the policy") and uses that to wave the answer through, even when the answer contradicts the policy. More rules just give it more excuses. The vague rubric forces it to make one judgement call instead of ticking boxes.
-
-The practical read: when a more detailed rubric does not beat the vague one, the next lever is fine-tuning, not more prompt writing. That is what the calibration eval below set out to test.
+The refund example explains why. With the short instructions the model has only one thing to do, which is hold the reply up against the policy and decide whether the two agree, so it notices that 60 days and 30 days don't match and fails the answer. The detailed version, oddly, gets in its own way: it hands the model a checklist (did the agent cite a policy, was the tone professional, did it give a timeframe), and because the reply happens to satisfy most of those boxes, the model decides it is fine and never circles back to the one detail that mattered. The more boxes there are to tick, the easier it is for the model to talk itself into a pass while walking straight past the real mistake.
 
 ## Where the models disagreed
 
-Qwen and Phi almost never argued about the good answers. They split only on the bad ones. When a response was clearly fine, both passed it. Every disagreement was about whether something was wrong.
+Qwen does the actual judging, but I also ran every example through a second model called Phi, purely as a sanity check to see where the two of them would land differently. On the clearly good replies they almost never disagreed; when an answer plainly matched the policy, both passed it without any fuss. The interesting splits were all on the bad answers, which is exactly where it matters.
 
-On the source-of-truth judge there were 14 disagreements. Qwen caught 11 bad answers that Phi let through. Phi caught 3 that Qwen missed, and all 3 were red-team cases: vague, hedging answers that dodge the context without flatly contradicting it. Those 3 are the sharpest picture of what the model still cannot catch.
+On the source-of-truth judge the two models disagreed fourteen times. Qwen caught eleven bad replies that Phi had waved through, and Phi caught three that Qwen had missed. Those three were all red-team cases, the deliberately polished-but-wrong replies described above: instead of stating a number that flatly contradicts the policy, they stay vague and talk around it, which makes them genuinely hard to catch.
 
-Phi's worst habit is worth keeping in view. One agent said data was held for 90 days when the policy said 30. Phi passed it and wrote that the agent "correctly stated 90 days, consistent with the 30-day grace period." It invented a reason instead of reading the context. That is why Phi runs as a challenger and not a judge: if it flags something Qwen passed, look closer, but do not trust it on its own.
+Phi, though, cannot be trusted to make the call on its own, and one example makes the reason obvious. A reply claimed customer data is kept for 90 days when the policy clearly said 30, the same kind of mismatch as the refund example. Phi not only passed it, it justified itself, writing that the agent "correctly stated 90 days, consistent with the 30-day grace period." There is no grace period anywhere in the policy; Phi invented one to bridge the gap between what the agent said and what the policy said, and then used its own invention to excuse the wrong answer. That is worse than a plain mistake, because the reasoning looks confident and reads as if it checks out. So Phi only ever gets a second opinion: if it flags something Qwen passed, I take another look, but it never decides anything on its own.
 
 Then I built the end-to-end support QA pipeline:
 
@@ -90,12 +94,13 @@ calibrated verdict artifacts
 one support QA report
 ```
 
-Two realistic support cases are included:
+Two realistic B2B support cases are included, each written so that all five judges have something to look at.
 
-1. `acme_analytics_enterprise_export_billing`
-2. `northstar_learning_webhook_secret_rotation`
+The first is Acme Analytics (`acme_analytics_enterprise_export_billing`), an enterprise customer whose large data export keeps timing out after a login-system migration, while they are also disputing a bill for user accounts they say they cancelled. The agent's reply sounds confident but goes wrong in almost every direction: it blames the customer's browser instead of the real cause, which is the size of the file, promises an engineering fix by the next morning that nobody authorised, hands out a $500 credit without finance sign-off, and leaves the next agent a handoff note so thin they would have to start the whole investigation over.
 
-The Northstar case is the cleaner final case. It produces the intended shape:
+The second is Northstar Learning (`northstar_learning_webhook_secret_rotation`), a customer whose automated messages into their own system stopped going through after they rotated a security key, leaving 36 new signups stranded right before a launch review. This is the cleaner case. The agent does the hard part well, reading the logs and correctly working out that the messages are being rejected because they are still signed with the old key, and it sensibly avoids promising to recover everything. Where it falls short is on the human and procedural side: it never acknowledges how urgent the situation is, it tells the customer to retry before confirming they have fixed their end, and it leaves a handoff that drops most of what the next person would need.
+
+The Northstar case is the one I used for the final end-to-end run, and it produces the shape I was hoping to see:
 
 | Judge | Result |
 |---|---|
@@ -119,7 +124,7 @@ The system runs locally and catches real support quality issues:
 
 One number keeps the rest honest: the false-safe rate, the share of bad answers a judge waves through. It is high. Phi missed between 57% and 80% of bad answers depending on the rubric, and Qwen on the detailed rubrics missed about half. The vague rubric is what pulled Qwen down to 13% on source-of-truth, which is why it is the default. Even then, this is a reviewer that flags the clear-cut failures before a human reads them. It is not a replacement for the human.
 
-It also records known judge mistakes instead of hiding them. For example, Qwen sometimes misread "I cannot promise a full backfill" as if the agent had promised a full backfill. The pipeline now preserves the original model verdict, applies a visible calibration adjustment, and uses the calibrated verdict in the final QA report.
+It also keeps its own mistakes out in the open instead of hiding them. Qwen has one habit worth knowing about: it sometimes reads a refused promise as if it were a real one. In the Northstar case the agent wrote, "I cannot promise a full backfill," which is the agent clearly declining to promise anything, and yet Qwen flagged it as an unsupported promise, having latched onto the words "promise a full backfill" without registering the "I cannot" in front of them. Rather than quietly fix the verdict behind the scenes, the pipeline keeps Qwen's original answer on the record, applies a named rule that flips it to the correct call, and shows both versions in the final report, so anyone reading can see exactly what was changed and why. If the rule is ever wrong, it is visible; if the model improves later and stops making the mistake, the rule simply stops firing.
 
 The calibration eval tested 40 examples:
 
