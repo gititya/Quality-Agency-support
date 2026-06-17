@@ -30,7 +30,7 @@ A five-judge evaluation system for customer support AI responses. The stack runs
 This system can:
 
 1. Run one judge on a labeled example set.
-2. Compare rubric variants.
+2. Compare rubric variant with a **Vague**, a **detailed** and a **detailed example** set that has some sample graded answers to use as **reference**. 
 3. Compare Qwen against Phi as a challenger.
 4. Save metrics and disagreement reports.
 5. Run all five judges on a support case.
@@ -42,8 +42,8 @@ The important part is that the report does not hide the evidence. It shows which
 
 ### For each judge:
 
-1. Built gold pass/fail examples.
-2. Built red-team examples that sound polished but should fail.
+1. Built gold pass/fail examples - some obvious good and some obvious bad responses for the judge for which the correct answers were pre-decided by me. 
+2. Built red-team examples that sound polished but should fail (like trick questions) 
 3. Tested three rubric styles: vague, detailed, detailed with examples.
 4. Ran Qwen and Phi.
 5. Measured accuracy, false-safe rate, false-unsafe rate, JSON validity, span quality, and disagreement.
@@ -53,11 +53,11 @@ A judge was not done when its run finished. For every verdict the model got wron
 
 ## The rubric finding
 
-The rubric ablation was the most important experiment, and it went the opposite way to what I expected. **The vague rubric won, and adding more detail made the small model worse.**
+The rubric ablation (the process of trying out the decision with and without the rubrics I choose above) was the most important experiment, and it went the opposite way to what I expected. **The vague rubric won, and adding more detail made the small model worse.**
 
 For the source-of-truth judge on Qwen3-4B:
 
-| Rubric | Accuracy | Missed bad answers (false-safe) | Pinpointed the exact problem (span) |
+| Rubric | Accuracy | Missed bad answers  | Pinpointed the exact problem  |
 |---|---:|---:|---:|
 | **Vague** | **92%** | **13%** | **87%** |
 | Detailed | 72% | 47% | 53% |
