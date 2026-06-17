@@ -2,7 +2,7 @@
 
 This repo tests one question: _Can a small local model review a support response like a QA lead, catch the risky parts, and explain what needs to be fixed?_
 
-The answer is **yes**, for the five support quality areas tested here. This is intended for both B2C & B2B alike. 
+The answer is **yes**, for the five support quality areas tested here. It is meant for B2C and B2B support alike.
 
 ## The core idea
 
@@ -33,7 +33,7 @@ This system can:
 2. Compare rubric variants.
 3. Compare Qwen against Phi as a challenger.
 4. Save metrics and disagreement reports.
-5. Run all five judges on 2 support cases.
+5. Run all five judges on a support case.
 6. Synthesize those verdicts into one readable support QA report.
 7. Run a calibration eval to decide whether fine-tuning is worth doing.
 
@@ -100,7 +100,7 @@ The Northstar case is the cleaner final case. It produces the intended shape:
 | Judge | Result |
 |---|---|
 | Source of truth | PASS |
-| SOP adherence | FAIL |
+| SOP/process adherence | FAIL |
 | Unsupported promise | PASS after calibration |
 | Technical diagnosis | PASS |
 | Handoff completeness | FAIL |
@@ -109,7 +109,7 @@ That is a useful QA outcome. The agent used the logs and diagnosed the issue cor
 
 ## Final result
 
-The system supports local support QAs and catches real support quality issues:
+The system runs locally and catches real support quality issues:
 
 - policy misuse
 - skipped workflow steps
@@ -197,7 +197,7 @@ data/corrected/                              corrected model mistakes
 data/future_finetune/                        possible future training data
 data/cases/                                  end-to-end support cases
 src/eval_judges/                             parser, prompt builder, scorer, pipeline, synthesis
-reports/                                    saved judge runs and pipeline reports
+reports/                                     saved judge runs and pipeline reports
 run_judge.py                                per-judge runner
 run_pipeline.py                             five-judge support QA runner
 synthesize_report.py                        support QA report generator
