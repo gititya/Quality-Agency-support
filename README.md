@@ -2,7 +2,7 @@
 
 This repo tests one question: _Can a small local model review a support response like a QA lead, catch the risky parts, and explain what needs to be fixed?_
 
-The answer is **yes**, for the five support quality areas tested here. This is intended for both B2C & B2C alike. 
+The answer is **yes**, for the five support quality areas tested here. This is intended for both B2C & B2B alike. 
 
 ## The core idea
 
@@ -35,7 +35,7 @@ This system can:
 4. Save metrics and disagreement reports.
 5. Run all five judges on 2 support cases.
 6. Synthesize those verdicts into one readable support QA report.
-8. Run a calibration eval to decide whether fine-tuning is worth doing.
+7. Run a calibration eval to decide whether fine-tuning is worth doing.
 
 The important part is that the report does not hide the evidence. It shows which judge passed or failed, what text caused the failure, what requirement was missing, and when a deterministic calibration guardrail changed a model verdict.
 
