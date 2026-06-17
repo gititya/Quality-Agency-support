@@ -1,66 +1,46 @@
 # Quality Agency Support
 
-Local customer support QA judges for B2B and B2C SaaS replies.
+This repo tests one question: _Can a small local model review a support response like a QA lead, catch the risky parts, and explain what needs to be fixed?_
 
-This repo tests one question: can a small local model review a support response like a QA lead, catch the risky parts, and explain what needs to be fixed?
+The answer is **yes**, for the five support quality areas tested here. This is intended for both B2C & B2C alike. 
 
-The answer is yes, for the five support quality areas tested here.
+## The core idea
 
-## About
+Support QA is usually treated as one broad score: **was the answer good or bad?**
 
-Support QA is usually treated as one broad score: was the answer good or bad?
-
-That is too vague to be useful. A reply can be polite and still ignore policy. It can be technically correct and still skip a required process step. It can give a good customer answer and still leave the next support agent with a useless handoff.
+That is too vague to be useful because: 
+1. A support call can be polite, helpful, and still ignore policy.
+2. It can technically be correct, yet still skip a required process step.
+3. It can give a good customer answer and still leave the next support agent with a useless handoff. 
 
 This repo breaks support QA into five specialist reviewers:
 
 1. **Source of truth** - did the agent use the policy, account data, tool output, or logs?
-2. **SOP adherence** - did the agent follow the required support workflow?
+2. **SOP/Process adherence** - did the agent follow the required support workflow?
 3. **Unsupported promise** - did the agent promise a fix, refund, credit, backfill, escalation, or timeline without authority?
 4. **Technical diagnosis** - did the technical explanation actually make sense?
 5. **Handoff completeness** - could the next agent continue without making the customer repeat everything?
 
 Each judge gives a structured verdict with pass/fail, confidence, rationale, exact failure span, and a safer requirement.
 
-## Description
+## What was built
 
-The final build is a local evaluation system, not a support bot.
+A five-judge evaluation system for customer support AI responses. The stack runs on 2 local MLX models (Qwen3-4B-4bit **primary**, Phi-4-mini-instruct-4bit **challenger**). 
 
-It does not answer customers. It reviews support answers.
-
-The system can:
+This system can:
 
 1. Run one judge on a labeled example set.
 2. Compare rubric variants.
 3. Compare Qwen against Phi as a challenger.
 4. Save metrics and disagreement reports.
-5. Run all five judges on one support case.
+5. Run all five judges on 2 support cases.
 6. Synthesize those verdicts into one readable support QA report.
-7. Run a calibration eval to decide whether fine-tuning is worth doing.
+8. Run a calibration eval to decide whether fine-tuning is worth doing.
 
 The important part is that the report does not hide the evidence. It shows which judge passed or failed, what text caused the failure, what requirement was missing, and when a deterministic calibration guardrail changed a model verdict.
 
-## The one idea
 
-A good support QA system should not ask "does this sound helpful?"
-
-It should ask narrower questions:
-
-- Did the agent use the facts available to them?
-- Did they follow the required process?
-- Did they create an expectation support cannot meet?
-- Did they diagnose the technical issue from evidence?
-- Did they give the next agent enough context to act?
-
-That is the whole experiment.
-
-One broad judge is easy to fool. Five narrow judges are easier to inspect.
-
-## What I built and ran
-
-I built five local judges using `mlx-community/Qwen3-4B-4bit` as the primary model and `mlx-community/Phi-4-mini-instruct-4bit` as the challenger.
-
-For each judge:
+### For each judge:
 
 1. Built gold pass/fail examples.
 2. Built red-team examples that sound polished but should fail.
@@ -103,9 +83,7 @@ That is a useful QA outcome. The agent used the logs and diagnosed the issue cor
 
 ## Final result
 
-The system works as a proof of work for local support QA.
-
-It catches real support quality issues:
+The system supports local support QAs and catches real support quality issues:
 
 - policy misuse
 - skipped workflow steps
@@ -131,9 +109,7 @@ The decision was not to fine-tune yet.
 
 Fine-tuning would try to teach the model these judge boundaries internally.
 
-That would be useful if the model kept making the same mistakes after good prompts and visible guardrails.
-
-That did not happen here.
+That would be useful if the model kept making the same mistakes after good prompts and visible guardrails, which did not happen here.
 
 The calibration eval says the current system is already strong enough for the final build:
 
@@ -148,17 +124,6 @@ So fine-tuning is left as an optional depth exercise, not required repo work.
 If this project is reopened later, the fine-tuning target should be narrow:
 
 > Teach Qwen not to pass a response just because part of it is grounded. Evaluate each claim, step, and handoff element independently, and require explicit evidence.
-
-## What this is not
-
-1. NOT a customer-facing support bot.
-2. NOT a support response generator.
-3. NOT a replacement for human QA.
-4. NOT a claim that five judges cover every support quality issue.
-5. NOT a fine-tuned model.
-6. NOT a production integration with Zendesk, Intercom, Salesforce, Stripe, or product logs.
-
-It is a local, auditable support QA experiment.
 
 ## How to run
 
@@ -209,16 +174,5 @@ run_judge.py                                per-judge runner
 run_pipeline.py                             five-judge support QA runner
 synthesize_report.py                        support QA report generator
 run_pipeline_calibration.py                 fine-tuning decision eval
-experiment-walkthrough.md                   narrative writeup of the experiment
-PLAN.md                                     final implementation plan and decision record
-CLAUDE.md                                   agent working context
-SKILL.md                                    repo status note for future agents
 ```
 
-## The honest claim
-
-This repo shows how to build a small local QA agency for support responses.
-
-The useful result is not "the model is perfect." It is that the system is inspectable. Every judge has a narrow job. Every verdict has evidence. Known model mistakes are calibrated visibly. Fine-tuning was considered, tested, and rejected for now based on metrics.
-
-That is enough to close the repo as a completed support QA proof of work.
