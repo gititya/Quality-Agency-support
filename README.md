@@ -49,9 +49,11 @@ The important part is that the report does not hide the evidence. It shows which
 5. Measured accuracy, false-safe rate, false-unsafe rate, JSON validity, span quality, and disagreement.
 6. Wrote corrected records for the model mistakes.
 
+A judge was not done when its run finished. For every verdict the model got wrong I classified the miss, wrote a corrected record with the real verdict and the exact failure span, and filed it into the gold set or a future fine-tuning set. Each judge also got a short wind-up note: what it catches, what it misses, and whether the challenger was worth running. Skip that pass and you are left with metrics and no learning.
+
 ## The rubric finding
 
-The rubric ablation was the most important experiment, and the result was the opposite of the obvious guess: **the vague rubric won, and adding more detail made the small model worse.**
+The rubric ablation was the most important experiment, and it went the opposite way to what I expected. **The vague rubric won, and adding more detail made the small model worse.**
 
 For the source-of-truth judge on Qwen3-4B:
 
@@ -61,9 +63,17 @@ For the source-of-truth judge on Qwen3-4B:
 | Detailed | 72% | 47% | 53% |
 | Detailed + examples | 68% | 53% | 47% |
 
-At 4B parameters the model is small enough that a detailed checklist invites rationalisation: it finds one rule that looks satisfied ("the agent mentioned the policy") and uses it to justify a pass, even when the answer contradicted the policy. More rules meant more escape routes. The vague rubric forced a holistic judgement instead of box-ticking.
+At 4B parameters a long checklist backfires. The model finds one rule that looks satisfied ("the agent mentioned the policy") and uses that to wave the answer through, even when the answer contradicts the policy. More rules just give it more excuses. The vague rubric forces it to make one judgement call instead of ticking boxes.
 
-The practical implication: when better rubrics do not beat the vague one, the next lever is fine-tuning, not more prompt engineering — which is exactly what the calibration eval below tested.
+The practical read: when a more detailed rubric does not beat the vague one, the next lever is fine-tuning, not more prompt writing. That is what the calibration eval below set out to test.
+
+## Where the models disagreed
+
+Qwen and Phi almost never argued about the good answers. They split only on the bad ones. When a response was clearly fine, both passed it. Every disagreement was about whether something was wrong.
+
+On the source-of-truth judge there were 14 disagreements. Qwen caught 11 bad answers that Phi let through. Phi caught 3 that Qwen missed, and all 3 were red-team cases: vague, hedging answers that dodge the context without flatly contradicting it. Those 3 are the sharpest picture of what the model still cannot catch.
+
+Phi's worst habit is worth keeping in view. One agent said data was held for 90 days when the policy said 30. Phi passed it and wrote that the agent "correctly stated 90 days, consistent with the 30-day grace period." It invented a reason instead of reading the context. That is why Phi runs as a challenger and not a judge: if it flags something Qwen passed, look closer, but do not trust it on its own.
 
 Then I built the end-to-end support QA pipeline:
 
@@ -106,6 +116,8 @@ The system supports local support QAs and catches real support quality issues:
 - risky promises
 - overconfident technical reasoning
 - thin handoffs
+
+One number keeps the rest honest: the false-safe rate, the share of bad answers a judge waves through. It is high. Phi missed between 57% and 80% of bad answers depending on the rubric, and Qwen on the detailed rubrics missed about half. The vague rubric is what pulled Qwen down to 13% on source-of-truth, which is why it is the default. Even then, this is a reviewer that flags the clear-cut failures before a human reads them. It is not a replacement for the human.
 
 It also records known judge mistakes instead of hiding them. For example, Qwen sometimes misread "I cannot promise a full backfill" as if the agent had promised a full backfill. The pipeline now preserves the original model verdict, applies a visible calibration adjustment, and uses the calibrated verdict in the final QA report.
 
