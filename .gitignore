@@ -4,3 +4,9 @@ __pycache__/
 .DS_Store
 *.egg-info/
 .env
+
+# project context / docs — ignore
+CLAUDE.md
+PLAN.md
+SKILL.md
+experiment-walkthrough.md
